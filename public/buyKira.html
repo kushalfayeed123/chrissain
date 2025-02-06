@@ -51,7 +51,11 @@
         </button>
       </div>
     </nav>
-
+    <!-- Mobile Warning Banner (hidden by default) -->
+    <div id="mobileWarning" style="display: none">
+      For optimal wallet connectivity on mobile devices, please use the MetaMask
+      app's built-in browser or a supported browser.
+    </div>
     <!-- Main Container -->
     <div class="container my-5">
       <!-- Stats Section -->
@@ -167,6 +171,16 @@
 
     <!-- JavaScript -->
     <script>
+      // Function to check if user is on mobile Chrome
+      function isMobileChrome() {
+        const ua = navigator.userAgent || navigator.vendor || window.opera;
+        return /Chrome/.test(ua) && /Mobile/.test(ua);
+      }
+
+      // Display the warning if on mobile Chrome
+      if (isMobileChrome()) {
+        document.getElementById("mobileWarning").style.display = "block";
+      }
       // Global variables and configuration
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
       // Minimal ABI for the functions used
