@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KiraCoin Exchange</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Ethers.js -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f8f9fa;
+      }
+      .navbar {
+        background-color: #ffffff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        padding: 1.5rem;
+      }
+      .bg-primary {
+        background-color: #2563eb !important;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg py-3">
+      <div class="container">
+        <a class="navbar-brand fw-bold text-dark" href="#">
+          KiraCoin Exchange
+        </a>
+        <div id="walletAddress" class="badge bg-light text-dark p-2">
+          Not connected
+        </div>
+        <button id="connectButton" class="btn btn-primary">
+          Connect Wallet
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container my-5">
+      <!-- Stats Section -->
+      <div class="row g-4 mb-4">
+        <div class="col-12">
+          <div class="card bg-primary text-white">
+            <div class="row text-center">
+              <div class="col-md-4">
+                <h6>Current Price</h6>
+                <h3>$<span id="currentPrice">0.00</span></h3>
+              </div>
+              <div class="col-md-4">
+                <h6>Available Supply</h6>
+                <h3><span id="availableSupply">0</span> KIRA</h3>
+              </div>
+              <div class="col-md-4">
+                <h6>Total Sold</h6>
+                <h3><span id="totalSold">0</span> KIRA</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Purchase Sections -->
+      <div class="row g-4">
+        <!-- Buy with Stablecoins -->
+        <div class="col-md-6">
+          <div class="card">
+            <h4 class="mb-4">Buy with Stablecoins</h4>
+            <div class="mb-3">
+              <label class="form-label">Select Stablecoin</label>
+              <select id="stablecoinSelect" class="form-select">
+                <option value="BUSD">BUSD</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Amount to Spend (USD)</label>
+              <input
+                type="number"
+                id="stablecoinAmount"
+                class="form-control"
+                placeholder="Enter USD amount"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">KIRA Tokens You Will Receive</label>
+              <input
+                type="text"
+                id="stablecoinKiraPreview"
+                class="form-control"
+                placeholder="0.00"
+                readonly
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Equivalent in USD</label>
+              <input
+                type="text"
+                id="stablecoinUsdPreview"
+                class="form-control"
+                placeholder="$0.00"
+                readonly
+              />
+            </div>
+            <button id="buyStablecoinButton" class="btn btn-primary w-100">
+              Approve &amp; Buy KIRA
+            </button>
+          </div>
+        </div>
+
+        <!-- Buy with Native Currency (BNB) -->
+        <div class="col-md-6">
+          <div class="card">
+            <h4 class="mb-4">Buy with BNB</h4>
+            <div class="mb-3">
+              <label class="form-label">Amount to Spend (USD)</label>
+              <input
+                type="number"
+                id="bnbUsdAmount"
+                class="form-control"
+                placeholder="Enter USD amount"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">KIRA Tokens You Will Receive</label>
+              <input
+                type="text"
+                id="bnbKiraPreview"
+                class="form-control"
+                placeholder="0.00"
+                readonly
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Equivalent in BNB</label>
+              <input
+                type="text"
+                id="bnbEquivalentPreview"
+                class="form-control"
+                placeholder="0.00"
+                readonly
+              />
+            </div>
+            <button id="buyNativeButton" class="btn btn-primary w-100">
+              Buy KIRA
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+      // Global variables and configuration
+      const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
+      // Minimal ABI for the functions used
+      const contractABI = [
+        {
+          inputs: [
+            { internalType: "address", name: "_priceFeed", type: "address" },
+          ],
+          stateMutability: "nonpayable",
+          type: "constructor",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "spender", type: "address" },
+            { internalType: "uint256", name: "allowance", type: "uint256" },
+            { internalType: "uint256", name: "needed", type: "uint256" },
+          ],
+          name: "ERC20InsufficientAllowance",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "sender", type: "address" },
+            { internalType: "uint256", name: "balance", type: "uint256" },
+            { internalType: "uint256", name: "needed", type: "uint256" },
+          ],
+          name: "ERC20InsufficientBalance",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "approver", type: "address" },
+          ],
+          name: "ERC20InvalidApprover",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "receiver", type: "address" },
+          ],
+          name: "ERC20InvalidReceiver",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "sender", type: "address" },
+          ],
+          name: "ERC20InvalidSender",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "spender", type: "address" },
+          ],
+          name: "ERC20InvalidSpender",
+          type: "error",
+        },
+        { inputs: [], name: "EnforcedPause", type: "error" },
+        { inputs: [], name: "ExpectedPause", type: "error" },
+        {
+          inputs: [{ internalType: "address", name: "owner", type: "address" }],
+          name: "OwnableInvalidOwner",
+          type: "error",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "account", type: "address" },
+          ],
+          name: "OwnableUnauthorizedAccount",
+          type: "error",
+        },
+        { inputs: [], name: "ReentrancyGuardReentrantCall", type: "error" },
+        {
+          inputs: [{ internalType: "address", name: "token", type: "address" }],
+          name: "SafeERC20FailedOperation",
+          type: "error",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "owner",
+              type: "address",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "spender",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "value",
+              type: "uint256",
+            },
+          ],
+          name: "Approval",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "recipient",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "bool",
+              name: "isNative",
+              type: "bool",
+            },
+          ],
+          name: "FundsWithdrawn",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "previousOwner",
+              type: "address",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "newOwner",
+              type: "address",
+            },
+          ],
+          name: "OwnershipTransferred",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: false,
+              internalType: "address",
+              name: "account",
+              type: "address",
+            },
+          ],
+          name: "Paused",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "newFeed",
+              type: "address",
+            },
+          ],
+          name: "PriceFeedUpdated",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "newIncrementStep",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "newMultiplier",
+              type: "uint256",
+            },
+          ],
+          name: "PriceParamsUpdated",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "token",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "decimals",
+              type: "uint256",
+            },
+          ],
+          name: "StablecoinAdded",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "token",
+              type: "address",
+            },
+          ],
+          name: "StablecoinRemoved",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "buyer",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "totalPrice",
+              type: "uint256",
+            },
+          ],
+          name: "TokensPurchased",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "from",
+              type: "address",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "to",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "value",
+              type: "uint256",
+            },
+          ],
+          name: "Transfer",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: false,
+              internalType: "address",
+              name: "account",
+              type: "address",
+            },
+          ],
+          name: "Unpaused",
+          type: "event",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "token", type: "address" },
+            { internalType: "uint256", name: "tokenDecimals", type: "uint256" },
+          ],
+          name: "addStablecoin",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "owner", type: "address" },
+            { internalType: "address", name: "spender", type: "address" },
+          ],
+          name: "allowance",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "spender", type: "address" },
+            { internalType: "uint256", name: "value", type: "uint256" },
+          ],
+          name: "approve",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [{ internalType: "address", name: "", type: "address" }],
+          name: "approvedStablecoins",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "availableSupply",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "account", type: "address" },
+          ],
+          name: "balanceOf",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "uint256", name: "amount", type: "uint256" },
+          ],
+          name: "burnFromContract",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "uint256", name: "minTokens", type: "uint256" },
+          ],
+          name: "buyWithNative",
+          outputs: [],
+          stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "stablecoinAddress",
+              type: "address",
+            },
+            { internalType: "uint256", name: "tokenAmount", type: "uint256" },
+          ],
+          name: "buyWithStablecoin",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "currentPrice",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "decimals",
+          outputs: [{ internalType: "uint8", name: "", type: "uint8" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "maxPurchaseAmount",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "name",
+          outputs: [{ internalType: "string", name: "", type: "string" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "owner",
+          outputs: [{ internalType: "address", name: "", type: "address" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "pause",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "paused",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "priceIncrementStep",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "priceMultiplier",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "_recipient", type: "address" },
+            { internalType: "uint256", name: "_nativeAmount", type: "uint256" },
+          ],
+          name: "reconcileNativeCoinAccounts",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "stablecoinAddress",
+              type: "address",
+            },
+            { internalType: "address", name: "recipient", type: "address" },
+            { internalType: "uint256", name: "amount", type: "uint256" },
+          ],
+          name: "reconcileStableCoinAccounts",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [{ internalType: "address", name: "token", type: "address" }],
+          name: "recoverTokens",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "renounceOwnership",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "uint256", name: "newStep", type: "uint256" },
+            { internalType: "uint256", name: "newMultiplier", type: "uint256" },
+          ],
+          name: "setPriceParams",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [{ internalType: "address", name: "", type: "address" }],
+          name: "stablecoinDecimals",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "symbol",
+          outputs: [{ internalType: "string", name: "", type: "string" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalSupply",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalTokensSold",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "to", type: "address" },
+            { internalType: "uint256", name: "value", type: "uint256" },
+          ],
+          name: "transfer",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "from", type: "address" },
+            { internalType: "address", name: "to", type: "address" },
+            { internalType: "uint256", name: "value", type: "uint256" },
+          ],
+          name: "transferFrom",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "newOwner", type: "address" },
+          ],
+          name: "transferOwnership",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "unpause",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "address", name: "newFeed", type: "address" },
+          ],
+          name: "updatePriceFeed",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        { stateMutability: "payable", type: "receive" },
+      ];
+
+      // Stablecoin info (assumed to have 18 decimals)
+      const stablecoins = {
+        BUSD: {
+          address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+          decimals: 18,
+        },
+        USDT: {
+          address: "0x55d398326f99059fF775485246999027B3197955",
+          decimals: 18,
+        },
+      };
+
+      // Assumed conversion rate for preview purposes: 1 KIRA = $100 USD
+      const kiraUsdPrice = 100;
+      let kiraContract, provider, signer;
+      let currentPriceBN; // BigNumber (18 decimals)
+      let bnbPrice; // in USD (from CoinGecko)
+      let availableSupply;
+
+      async function initWeb3() {
+        if (window.ethereum) {
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          await provider.send("eth_requestAccounts", []);
+          signer = provider.getSigner();
+          kiraContract = new ethers.Contract(
+            contractAddress,
+            contractABI,
+            signer
+          );
+          await updateContractStats();
+          return true;
+        } else {
+          document.getElementById("walletAddress").innerText =
+            "No wallet detected";
+          return false;
+        }
+      }
+
+      async function connectWallet() {
+        try {
+          await provider.send("eth_requestAccounts", []);
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
+        } catch (error) {
+          console.error("Wallet connection failed:", error);
+        }
+      }
+
+      async function updateContractStats() {
+        try {
+          // Fetch currentPrice (BigNumber), availableSupply, and totalTokensSold
+          const currentPrice = await kiraContract.currentPrice();
+          currentPriceBN = currentPrice;
+          document.getElementById("currentPrice").innerText =
+            ethers.utils.formatUnits(currentPrice, 18);
+
+          const supply = await kiraContract.availableSupply();
+          availableSupply = supply;
+          document.getElementById("availableSupply").innerText =
+            ethers.utils.formatUnits(supply, 18);
+
+          const sold = await kiraContract.totalTokensSold();
+          document.getElementById("totalSold").innerText =
+            ethers.utils.formatUnits(sold, 18);
+
+          // Fetch BNB price from CoinGecko
+          bnbPrice = await getBnbPrice();
+        } catch (error) {
+          console.error("Error updating contract stats:", error);
+        }
+      }
+
+      async function getBnbPrice() {
+        const apiUrl =
+          "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd";
+        try {
+          const response = await fetch(apiUrl);
+          const data = await response.json();
+          return data.binancecoin.usd;
+        } catch (error) {
+          console.error("Error fetching BNB price:", error);
+          return null;
+        }
+      }
+
+      // Update preview for stablecoin purchase
+      function updateStablecoinPreview() {
+        const usdVal = parseFloat(
+          document.getElementById("stablecoinAmount").value
+        );
+        if (isNaN(usdVal) || usdVal <= 0) {
+          document.getElementById("stablecoinKiraPreview").value = "";
+          document.getElementById("stablecoinUsdPreview").value = "";
+          return;
+        }
+        // Expected KIRA tokens = (usdVal / kiraUsdPrice)
+        const kiraTokens = usdVal / kiraUsdPrice;
+        document.getElementById("stablecoinKiraPreview").value =
+          kiraTokens.toFixed(4);
+        document.getElementById("stablecoinUsdPreview").value =
+          "$" + usdVal.toFixed(2);
+      }
+
+      // Update preview for native purchase (BNB)
+      async function updateNativePreview() {
+        const usdVal = parseFloat(
+          document.getElementById("bnbUsdAmount").value
+        );
+        if (isNaN(usdVal) || usdVal <= 0) {
+          document.getElementById("bnbKiraPreview").value = "";
+          document.getElementById("bnbEquivalentPreview").value = "";
+          return;
+        }
+        // Calculate expected tokens using the contract's formula:
+        // tokenAmount = (msg.value * nativePrice) / currentPrice.
+        // In our front-end, we approximate:
+        //   msg.value = bnbEquivalent = usdVal / bnbPrice  (in BNB)
+        // Then: expectedTokens = (bnbValue in wei * nativePrice) / currentPrice.
+        // For simplicity, we can also compute: expectedTokens = (usdVal * 1e18) / currentPrice.
+        const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
+        const expectedKiraTokensBN = usdAmountBN
+          .mul(ethers.BigNumber.from(10).pow(18))
+          .div(currentPriceBN);
+        // Use a 1% tolerance to allow for slight differences in price feeds/rounding.
+        const tolerance = expectedKiraTokensBN.mul(1).div(100); // 1%
+        const minTokensBN = expectedKiraTokensBN.sub(tolerance);
+        const expectedKiraTokens = parseFloat(
+          ethers.utils.formatUnits(expectedKiraTokensBN, 18)
+        );
+        document.getElementById("bnbKiraPreview").value =
+          expectedKiraTokens.toFixed(4);
+        // BNB equivalent (to send as msg.value)
+        const bnbEquivalent = usdVal / bnbPrice;
+        document.getElementById("bnbEquivalentPreview").value =
+          bnbEquivalent.toFixed(6);
+      }
+
+      // Purchase with stablecoin
+      async function buyWithStablecoin() {
+        const stablecoinSelect =
+          document.getElementById("stablecoinSelect").value;
+        const usdVal = parseFloat(
+          document.getElementById("stablecoinAmount").value
+        );
+        if (isNaN(usdVal) || usdVal <= 0) {
+          alert("Enter a valid USD amount");
+          return;
+        }
+        // Calculate number of KIRA tokens to purchase:
+        const kiraTokens = usdVal / kiraUsdPrice;
+        const kiraTokensStr = kiraTokens.toFixed(18);
+        const tokenAmount = ethers.utils.parseUnits(kiraTokensStr, 18);
+        // For stablecoin purchase, assume 1 stablecoin ≈ 1 USD (18 decimals).
+        const totalPriceStable = ethers.utils.parseUnits(usdVal.toString(), 18);
+        try {
+          // Approve the stablecoin transfer first.
+          const stable = new ethers.Contract(
+            stablecoins[stablecoinSelect].address,
+            ["function approve(address,uint256) public returns (bool)"],
+            signer
+          );
+          const approveTx = await stable.approve(
+            contractAddress,
+            totalPriceStable
+          );
+          await approveTx.wait();
+          // Then call buyWithStablecoin
+          const tx = await kiraContract.buyWithStablecoin(
+            stablecoins[stablecoinSelect].address,
+            tokenAmount
+          );
+          await tx.wait();
+          alert("Stablecoin purchase successful!");
+          await updateContractStats();
+        } catch (error) {
+          console.error("Stablecoin purchase failed:", error);
+          alert("Purchase failed: " + error.message);
+        }
+      }
+
+      // Purchase with native currency (BNB)
+      async function buyWithNative() {
+        const usdVal = parseFloat(
+          document.getElementById("bnbUsdAmount").value
+        );
+        if (isNaN(usdVal) || usdVal <= 0) {
+          alert("Enter a valid USD amount");
+          return;
+        }
+        // Calculate BNB equivalent in wei.
+        const bnbEquivalent = usdVal / bnbPrice;
+        const bnbEquivalentStr = bnbEquivalent.toFixed(18);
+        const bnbValue = ethers.utils.parseEther(bnbEquivalentStr);
+        // Recalculate expected tokens using our front-end formula:
+        const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
+        const expectedKiraTokensBN = usdAmountBN
+          .mul(ethers.BigNumber.from(10).pow(18))
+          .div(currentPriceBN);
+        // Use a 1% tolerance:
+        const tolerance = expectedKiraTokensBN.mul(1).div(100);
+        const minTokensBN = expectedKiraTokensBN.sub(tolerance);
+        try {
+          const tx = await kiraContract.buyWithNative(minTokensBN, {
+            value: bnbValue,
+          });
+          await tx.wait();
+          alert("Native purchase successful!");
+          await updateContractStats();
+        } catch (error) {
+          console.error("BNB purchase failed:", error);
+          alert("Purchase failed: " + error.message);
+        }
+      }
+
+      // Event listeners for live previews and button clicks.
+      document
+        .getElementById("connectButton")
+        .addEventListener("click", connectWallet);
+      document
+        .getElementById("stablecoinAmount")
+        .addEventListener("input", updateStablecoinPreview);
+      document
+        .getElementById("bnbUsdAmount")
+        .addEventListener("input", updateNativePreview);
+      document
+        .getElementById("buyStablecoinButton")
+        .addEventListener("click", buyWithStablecoin);
+      document
+        .getElementById("buyNativeButton")
+        .addEventListener("click", buyWithNative);
+
+      window.addEventListener("load", initWeb3);
+    </script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
