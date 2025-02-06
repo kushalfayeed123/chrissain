@@ -762,6 +762,40 @@
 
       async function initWeb3() {
         if (window.ethereum) {
+          // Define your token details
+          const tokenSymbol = "kira"; // Replace with your token's symbol (max 5 characters recommended)
+          const tokenDecimals = 18; // Replace with your token's decimals (usually 18 for ERC-20 tokens)
+          const tokenImage =
+            "https://firebasestorage.googleapis.com/v0/b/conw-e97be.firebasestorage.app/o/images%2Fkira-coin.png?alt=media&token=9b36fcde-7dc4-45b3-9969-96b0a20b6fc7"; // Replace with your token's image URL
+
+          // Create the parameters for the wallet_watchAsset method
+          const tokenDetails = {
+            type: "ERC20", // Specify the asset type
+            options: {
+              address: contractAddress,
+              symbol: tokenSymbol,
+              decimals: tokenDecimals,
+              image: tokenImage,
+            },
+          };
+
+          // Prompt MetaMask to add the token
+          window.ethereum
+            .request({
+              method: "wallet_watchAsset",
+              params: tokenDetails,
+            })
+            .then((wasAdded) => {
+              if (wasAdded) {
+                console.log("Token successfully added to MetaMask!");
+              } else {
+                console.log("Token addition was rejected by the user.");
+              }
+            })
+            .catch((error) => {
+              console.error("Error adding token to MetaMask:", error);
+            });
+
           provider = new ethers.providers.Web3Provider(window.ethereum);
           await provider.send("eth_requestAccounts", []);
           signer = provider.getSigner();
