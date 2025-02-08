@@ -16,6 +16,8 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <!-- WalletConnect Provider (v1) -->
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -37,6 +39,12 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
+      /* Fallback container styling */
+      #fallbackContainer {
+        text-align: center;
+        margin: 1rem auto;
+        max-width: 500px;
+      }
     </style>
   </head>
   <body>
@@ -57,7 +65,7 @@
     <!-- Mobile Warning Banner (hidden by default) -->
     <div id="mobileWarning" style="display: none">
       For optimal wallet connectivity on mobile devices, please use the MetaMask
-      app's built-in browser or a supported browser.
+      app's built-in browser or a supported wallet browser.
     </div>
     <!-- Main Container -->
     <div class="container my-5">
@@ -82,7 +90,6 @@
           </div>
         </div>
       </div>
-
       <!-- Purchase Sections -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
@@ -130,7 +137,6 @@
             </button>
           </div>
         </div>
-
         <!-- Buy with Native Currency (BNB) -->
         <div class="col-md-6">
           <div class="card">
@@ -171,22 +177,23 @@
         </div>
       </div>
     </div>
+    <!-- Fallback Container for alternative connection (WalletConnect) -->
+    <div id="fallbackContainer"></div>
 
     <!-- JavaScript -->
     <script>
-      // Function to check if user is on mobile Chrome
+      // Check for mobile Chrome (to display a warning)
       function isMobileChrome() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome/.test(ua) && /Mobile/.test(ua);
       }
-
-      // Display the warning if on mobile Chrome
       if (isMobileChrome()) {
         document.getElementById("mobileWarning").style.display = "block";
       }
-      // Global variables and configuration
+
+      // Global configuration – UPDATE THESE VALUES AS NEEDED FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Minimal ABI for the functions used
+      // Replace with your actual contract ABI
       const contractABI = [
         {
           inputs: [
@@ -756,7 +763,6 @@
         { stateMutability: "payable", type: "receive" },
       ];
 
-      // Stablecoin info (assumed to have 18 decimals)
       const stablecoins = {
         BUSD: {
           address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
@@ -767,52 +773,68 @@
           decimals: 18,
         },
       };
-
-      // Assumed conversion rate for preview purposes: 1 KIRA = $100 USD
+      // Assumed conversion rate: 1 KIRA = $100 USD
       const kiraUsdPrice = 100;
       let kiraContract, provider, signer;
       let currentPriceBN; // BigNumber (18 decimals)
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
+      let walletConnectProvider; // For WalletConnect
 
-      async function initWeb3() {
+      // Robust injected provider detection
+      function getInjectedProvider() {
+        if (typeof window === "undefined") return null;
         if (window.ethereum) {
-          // Define your token details
-          const tokenSymbol = "kira"; // Replace with your token's symbol (max 5 characters recommended)
-          const tokenDecimals = 18; // Replace with your token's decimals (usually 18 for ERC-20 tokens)
-          const tokenImage =
-            "https://firebasestorage.googleapis.com/v0/b/conw-e97be.firebasestorage.app/o/images%2Fkira-coin.png?alt=media&token=9b36fcde-7dc4-45b3-9969-96b0a20b6fc7"; // Replace with your token's image URL
+          if (window.ethereum.isTrust) return window.ethereum;
+          if (
+            window.ethereum.providers &&
+            Array.isArray(window.ethereum.providers)
+          ) {
+            const trustProvider = window.ethereum.providers.find(
+              (p) => p.isTrust
+            );
+            if (trustProvider) return trustProvider;
+          }
+          return window.ethereum;
+        }
+        if (window.trustwallet) return window.trustwallet;
+        return null;
+      }
 
-          // Create the parameters for the wallet_watchAsset method
-          const tokenDetails = {
-            type: "ERC20", // Specify the asset type
-            options: {
-              address: contractAddress,
-              symbol: tokenSymbol,
-              decimals: tokenDecimals,
-              image: tokenImage,
-            },
+      async function getInjectedProviderWithTimeout(timeout = 3000) {
+        let prov = getInjectedProvider();
+        if (prov) return prov;
+        return new Promise((resolve) => {
+          const handler = () => {
+            const p = getInjectedProvider();
+            if (p) resolve(p);
           };
-
-          // Prompt MetaMask to add the token
-          window.ethereum
-            .request({
-              method: "wallet_watchAsset",
-              params: tokenDetails,
-            })
-            .then((wasAdded) => {
-              if (wasAdded) {
-                console.log("Token successfully added to MetaMask!");
-              } else {
-                console.log("Token addition was rejected by the user.");
-              }
-            })
-            .catch((error) => {
-              console.error("Error adding token to MetaMask:", error);
+          window.addEventListener("trustwallet#initialized", handler, {
+            once: true,
+          });
+          setTimeout(() => {
+            window.removeEventListener("trustwallet#initialized", handler, {
+              once: true,
             });
+            resolve(getInjectedProvider());
+          }, timeout);
+        });
+      }
 
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          await provider.send("eth_requestAccounts", []);
+      // Initialize WalletConnect provider using its full SDK
+      async function initWalletConnectProvider() {
+        try {
+          // IMPORTANT: Update the RPC URL and chainId as needed for your project.
+          walletConnectProvider = new WalletConnectProvider.default({
+            rpc: {
+              // Example for Binance Smart Chain Mainnet – update as needed.
+              56: "https://bsc-dataseed.binance.org/",
+            },
+            chainId: 56,
+            qrcode: true,
+          });
+          await walletConnectProvider.enable();
+          provider = new ethers.providers.Web3Provider(walletConnectProvider);
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
             contractAddress,
@@ -820,21 +842,88 @@
             signer
           );
           await updateContractStats();
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
+          document.getElementById("fallbackContainer").innerHTML = "";
+          return true;
+        } catch (error) {
+          console.error("WalletConnect connection failed:", error);
+          return false;
+        }
+      }
+
+      // Updated initWeb3: try injected provider first; fallback to WalletConnect if not found.
+      async function initWeb3() {
+        const injectedProvider = await getInjectedProviderWithTimeout();
+        if (injectedProvider) {
+          const tokenDetails = {
+            type: "ERC20",
+            options: {
+              address: contractAddress,
+              symbol: "kira",
+              decimals: 18,
+              image:
+                "https://firebasestorage.googleapis.com/v0/b/conw-e97be.firebasestorage.app/o/images%2Fkira-coin.png?alt=media&token=9b36fcde-7dc4-45b3-9969-96b0a20b6fc7",
+            },
+          };
+          injectedProvider
+            .request({
+              method: "wallet_watchAsset",
+              params: tokenDetails,
+            })
+            .then((wasAdded) => {
+              console.log(
+                wasAdded ? "Token added!" : "Token addition rejected"
+              );
+            })
+            .catch((error) => {
+              console.error("Error adding token:", error);
+            });
+          provider = new ethers.providers.Web3Provider(injectedProvider);
+          try {
+            await provider.send("eth_requestAccounts", []);
+          } catch (error) {
+            console.error("Wallet connection failed:", error);
+            document.getElementById("walletAddress").innerText =
+              "Connection failed";
+            return false;
+          }
+          signer = provider.getSigner();
+          kiraContract = new ethers.Contract(
+            contractAddress,
+            contractABI,
+            signer
+          );
+          await updateContractStats();
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
           return true;
         } else {
+          // No injected provider found; show WalletConnect fallback.
           document.getElementById("walletAddress").innerText =
             "No wallet detected";
+          const fallbackDiv = document.getElementById("fallbackContainer");
+          fallbackDiv.innerHTML = `
+            <p>No injected wallet was found. Please connect via WalletConnect.</p>
+            <button id="wcButton" class="btn btn-secondary">Connect with WalletConnect</button>
+          `;
+          document
+            .getElementById("wcButton")
+            .addEventListener("click", initWalletConnectProvider);
           return false;
         }
       }
 
       async function connectWallet() {
-        try {
-          await provider.send("eth_requestAccounts", []);
-          const address = await signer.getAddress();
-          document.getElementById("walletAddress").innerText = address;
-        } catch (error) {
-          console.error("Wallet connection failed:", error);
+        // Try injected provider first. WalletConnect fallback is handled in initWeb3.
+        const connected = await initWeb3();
+        if (connected && signer) {
+          try {
+            const address = await signer.getAddress();
+            document.getElementById("walletAddress").innerText = address;
+          } catch (err) {
+            console.error("Error fetching address:", err);
+          }
         }
       }
 
@@ -842,26 +931,19 @@
         try {
           // Hardcoded adjustment value as a BigNumber with 18 decimals
           const adjustment = ethers.utils.parseUnits("47000000", 18);
-
-          // Fetch currentPrice (BigNumber), availableSupply, and totalTokensSold
           const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
           document.getElementById("currentPrice").innerText =
             ethers.utils.formatUnits(currentPrice, 18);
-
           const supply = await kiraContract.availableSupply();
-          // Subtract the adjustment from available supply
           const adjustedSupply = supply.sub(adjustment);
           availableSupply = adjustedSupply;
           document.getElementById("availableSupply").innerText =
             ethers.utils.formatUnits(adjustedSupply, 18);
-
           const sold = await kiraContract.totalTokensSold();
-          // Add the adjustment to total sold
           const adjustedSold = sold.add(adjustment);
           document.getElementById("totalSold").innerText =
             ethers.utils.formatUnits(adjustedSold, 18);
-
           // Fetch BNB price from CoinGecko
           bnbPrice = await getBnbPrice();
         } catch (error) {
@@ -892,7 +974,6 @@
           document.getElementById("stablecoinUsdPreview").value = "";
           return;
         }
-        // Expected KIRA tokens = (usdVal / kiraUsdPrice)
         const kiraTokens = usdVal / kiraUsdPrice;
         document.getElementById("stablecoinKiraPreview").value =
           kiraTokens.toFixed(4);
@@ -900,7 +981,7 @@
           "$" + usdVal.toFixed(2);
       }
 
-      // Update preview for native purchase (BNB)
+      // Update preview for native (BNB) purchase
       async function updateNativePreview() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -910,25 +991,17 @@
           document.getElementById("bnbEquivalentPreview").value = "";
           return;
         }
-        // Calculate expected tokens using the contract's formula:
-        // tokenAmount = (msg.value * nativePrice) / currentPrice.
-        // In our front-end, we approximate:
-        //   msg.value = bnbEquivalent = usdVal / bnbPrice  (in BNB)
-        // Then: expectedTokens = (bnbValue in wei * nativePrice) / currentPrice.
-        // For simplicity, we can also compute: expectedTokens = (usdVal * 1e18) / currentPrice.
         const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
         const expectedKiraTokensBN = usdAmountBN
           .mul(ethers.BigNumber.from(10).pow(18))
           .div(currentPriceBN);
-        // Use a 1% tolerance to allow for slight differences in price feeds/rounding.
-        const tolerance = expectedKiraTokensBN.mul(1).div(100); // 1%
+        const tolerance = expectedKiraTokensBN.mul(1).div(100);
         const minTokensBN = expectedKiraTokensBN.sub(tolerance);
         const expectedKiraTokens = parseFloat(
           ethers.utils.formatUnits(expectedKiraTokensBN, 18)
         );
         document.getElementById("bnbKiraPreview").value =
           expectedKiraTokens.toFixed(4);
-        // BNB equivalent (to send as msg.value)
         const bnbEquivalent = usdVal / bnbPrice;
         document.getElementById("bnbEquivalentPreview").value =
           bnbEquivalent.toFixed(6);
@@ -945,14 +1018,12 @@
           alert("Enter a valid USD amount");
           return;
         }
-        // Calculate number of KIRA tokens to purchase:
         const kiraTokens = usdVal / kiraUsdPrice;
         const kiraTokensStr = kiraTokens.toFixed(18);
         const tokenAmount = ethers.utils.parseUnits(kiraTokensStr, 18);
-        // For stablecoin purchase, assume 1 stablecoin ≈ 1 USD (18 decimals).
         const totalPriceStable = ethers.utils.parseUnits(usdVal.toString(), 18);
         try {
-          // Approve the stablecoin transfer first.
+          // Approve stablecoin transfer first
           const stable = new ethers.Contract(
             stablecoins[stablecoinSelect].address,
             ["function approve(address,uint256) public returns (bool)"],
@@ -963,7 +1034,7 @@
             totalPriceStable
           );
           await approveTx.wait();
-          // Then call buyWithStablecoin
+          // Then call buyWithStablecoin on the contract
           const tx = await kiraContract.buyWithStablecoin(
             stablecoins[stablecoinSelect].address,
             tokenAmount
@@ -986,16 +1057,13 @@
           alert("Enter a valid USD amount");
           return;
         }
-        // Calculate BNB equivalent in wei.
         const bnbEquivalent = usdVal / bnbPrice;
         const bnbEquivalentStr = bnbEquivalent.toFixed(18);
         const bnbValue = ethers.utils.parseEther(bnbEquivalentStr);
-        // Recalculate expected tokens using our front-end formula:
         const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
         const expectedKiraTokensBN = usdAmountBN
           .mul(ethers.BigNumber.from(10).pow(18))
           .div(currentPriceBN);
-        // Use a 1% tolerance:
         const tolerance = expectedKiraTokensBN.mul(1).div(100);
         const minTokensBN = expectedKiraTokensBN.sub(tolerance);
         try {
@@ -1011,7 +1079,7 @@
         }
       }
 
-      // Event listeners for live previews and button clicks.
+      // Event listeners for live previews and button clicks
       document
         .getElementById("connectButton")
         .addEventListener("click", connectWallet);
@@ -1027,7 +1095,6 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
-
       window.addEventListener("load", initWeb3);
     </script>
     <!-- Bootstrap JS -->
