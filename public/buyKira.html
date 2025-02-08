@@ -39,7 +39,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Fallback container styling placed at the top of the page */
+      /* Fallback container at the top of the page */
       #fallbackContainer {
         text-align: center;
         margin: 1rem auto;
@@ -48,7 +48,7 @@
     </style>
   </head>
   <body>
-    <!-- Navigation (no connect button here as connection happens automatically) -->
+    <!-- Navigation (automated connection; no connect button) -->
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
         <a class="navbar-brand fw-bold text-dark" href="#">
@@ -63,8 +63,8 @@
     <!-- Fallback Container for WalletConnect fallback (displayed at the top if no injected provider) -->
     <div id="fallbackContainer"></div>
 
-    <!-- Mobile Warning Banner (hidden by default) -->
-    <div id="mobileWarning" style="display: none; text-align: center;">
+    <!-- Mobile Warning Banner (if needed) -->
+    <div id="mobileWarning" style="display: none; text-align: center">
       For optimal wallet connectivity on mobile devices, please use the MetaMask
       app's built-in browser or a supported wallet browser.
     </div>
@@ -92,7 +92,6 @@
           </div>
         </div>
       </div>
-
       <!-- Purchase Sections -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
@@ -183,7 +182,7 @@
 
     <!-- JavaScript -->
     <script>
-      // Display mobile warning if necessary
+      // Display mobile warning if needed
       function isMobileChrome() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome/.test(ua) && /Mobile/.test(ua);
@@ -764,7 +763,6 @@
         { stateMutability: "payable", type: "receive" },
       ];
 
-      
       const stablecoins = {
         BUSD: {
           address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
@@ -788,8 +786,13 @@
         if (typeof window === "undefined") return null;
         if (window.ethereum) {
           if (window.ethereum.isTrust) return window.ethereum;
-          if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-            const trustProvider = window.ethereum.providers.find(p => p.isTrust);
+          if (
+            window.ethereum.providers &&
+            Array.isArray(window.ethereum.providers)
+          ) {
+            const trustProvider = window.ethereum.providers.find(
+              (p) => p.isTrust
+            );
             if (trustProvider) return trustProvider;
           }
           return window.ethereum;
@@ -806,9 +809,13 @@
             const p = getInjectedProvider();
             if (p) resolve(p);
           };
-          window.addEventListener("trustwallet#initialized", handler, { once: true });
+          window.addEventListener("trustwallet#initialized", handler, {
+            once: true,
+          });
           setTimeout(() => {
-            window.removeEventListener("trustwallet#initialized", handler, { once: true });
+            window.removeEventListener("trustwallet#initialized", handler, {
+              once: true,
+            });
             resolve(getInjectedProvider());
           }, timeout);
         });
@@ -820,7 +827,7 @@
           // IMPORTANT: Update the RPC URL and chainId as needed for your project.
           walletConnectProvider = new WalletConnectProvider.default({
             rpc: {
-              56: "https://bsc-dataseed.binance.org/"
+              56: "https://bsc-dataseed.binance.org/",
             },
             chainId: 56,
             qrcode: false, // disable QR code modal to use deep linking
@@ -831,16 +838,20 @@
           }
           // Retrieve the connection URI.
           const uri = walletConnectProvider.connector.uri;
-          // Build a deep link URL for Trust Wallet (update for other wallets if needed)
+          // Build a deep link URL for Trust Wallet (update if targeting another wallet)
           const deepLink = "trust://wc?uri=" + encodeURIComponent(uri);
           // Redirect to the deep link to open the wallet app.
           window.location.href = deepLink;
-          // Wait for the user to complete the connection in their wallet app.
+          // Wait for the user to complete connection in their wallet app.
           await walletConnectProvider.enable();
-          // Initialize ethers with WalletConnect provider.
+          // Use WalletConnect provider with ethers.js
           provider = new ethers.providers.Web3Provider(walletConnectProvider);
           signer = provider.getSigner();
-          kiraContract = new ethers.Contract(contractAddress, contractABI, signer);
+          kiraContract = new ethers.Contract(
+            contractAddress,
+            contractABI,
+            signer
+          );
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
@@ -853,7 +864,7 @@
         }
       }
 
-      // Updated initWeb3: Try injected provider first; if not found, show WalletConnect fallback.
+      // Updated initWeb3: Try injected provider first; if not, show WalletConnect fallback.
       async function initWeb3() {
         const injectedProvider = await getInjectedProviderWithTimeout();
         if (injectedProvider) {
@@ -867,12 +878,15 @@
                 "https://firebasestorage.googleapis.com/v0/b/conw-e97be.firebasestorage.app/o/images%2Fkira-coin.png?alt=media&token=9b36fcde-7dc4-45b3-9969-96b0a20b6fc7",
             },
           };
-          injectedProvider.request({
-            method: "wallet_watchAsset",
-            params: tokenDetails,
-          })
+          injectedProvider
+            .request({
+              method: "wallet_watchAsset",
+              params: tokenDetails,
+            })
             .then((wasAdded) => {
-              console.log(wasAdded ? "Token added!" : "Token addition rejected");
+              console.log(
+                wasAdded ? "Token added!" : "Token addition rejected"
+              );
             })
             .catch((error) => {
               console.error("Error adding token:", error);
@@ -882,29 +896,37 @@
             await provider.send("eth_requestAccounts", []);
           } catch (error) {
             console.error("Wallet connection failed:", error);
-            document.getElementById("walletAddress").innerText = "Connection failed";
+            document.getElementById("walletAddress").innerText =
+              "Connection failed";
             return false;
           }
           signer = provider.getSigner();
-          kiraContract = new ethers.Contract(contractAddress, contractABI, signer);
+          kiraContract = new ethers.Contract(
+            contractAddress,
+            contractABI,
+            signer
+          );
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
           return true;
         } else {
-          // No injected provider found; show WalletConnect fallback at the top of the page.
-          document.getElementById("walletAddress").innerText = "No wallet detected";
+          // No injected provider found; show WalletConnect fallback at the top.
+          document.getElementById("walletAddress").innerText =
+            "No wallet detected";
           const fallbackDiv = document.getElementById("fallbackContainer");
           fallbackDiv.innerHTML = `
             <p>No injected wallet was found. Please connect via WalletConnect.</p>
             <button id="wcButton" class="btn btn-secondary">Connect with WalletConnect</button>
           `;
-          document.getElementById("wcButton").addEventListener("click", initWalletConnectProvider);
+          document
+            .getElementById("wcButton")
+            .addEventListener("click", initWalletConnectProvider);
           return false;
         }
       }
 
-      // Since the wallet should connect automatically, we initialize on page load.
+      // Since connection is automatic, we initialize on page load.
       async function connectWallet() {
         const connected = await initWeb3();
         if (connected && signer) {
@@ -956,20 +978,26 @@
 
       // Update preview for stablecoin purchase
       function updateStablecoinPreview() {
-        const usdVal = parseFloat(document.getElementById("stablecoinAmount").value);
+        const usdVal = parseFloat(
+          document.getElementById("stablecoinAmount").value
+        );
         if (isNaN(usdVal) || usdVal <= 0) {
           document.getElementById("stablecoinKiraPreview").value = "";
           document.getElementById("stablecoinUsdPreview").value = "";
           return;
         }
         const kiraTokens = usdVal / kiraUsdPrice;
-        document.getElementById("stablecoinKiraPreview").value = kiraTokens.toFixed(4);
-        document.getElementById("stablecoinUsdPreview").value = "$" + usdVal.toFixed(2);
+        document.getElementById("stablecoinKiraPreview").value =
+          kiraTokens.toFixed(4);
+        document.getElementById("stablecoinUsdPreview").value =
+          "$" + usdVal.toFixed(2);
       }
 
       // Update preview for native (BNB) purchase
       async function updateNativePreview() {
-        const usdVal = parseFloat(document.getElementById("bnbUsdAmount").value);
+        const usdVal = parseFloat(
+          document.getElementById("bnbUsdAmount").value
+        );
         if (isNaN(usdVal) || usdVal <= 0) {
           document.getElementById("bnbKiraPreview").value = "";
           document.getElementById("bnbEquivalentPreview").value = "";
@@ -981,16 +1009,23 @@
           .div(currentPriceBN);
         const tolerance = expectedKiraTokensBN.mul(1).div(100);
         const minTokensBN = expectedKiraTokensBN.sub(tolerance);
-        const expectedKiraTokens = parseFloat(ethers.utils.formatUnits(expectedKiraTokensBN, 18));
-        document.getElementById("bnbKiraPreview").value = expectedKiraTokens.toFixed(4);
+        const expectedKiraTokens = parseFloat(
+          ethers.utils.formatUnits(expectedKiraTokensBN, 18)
+        );
+        document.getElementById("bnbKiraPreview").value =
+          expectedKiraTokens.toFixed(4);
         const bnbEquivalent = usdVal / bnbPrice;
-        document.getElementById("bnbEquivalentPreview").value = bnbEquivalent.toFixed(6);
+        document.getElementById("bnbEquivalentPreview").value =
+          bnbEquivalent.toFixed(6);
       }
 
       // Purchase with stablecoin
       async function buyWithStablecoin() {
-        const stablecoinSelect = document.getElementById("stablecoinSelect").value;
-        const usdVal = parseFloat(document.getElementById("stablecoinAmount").value);
+        const stablecoinSelect =
+          document.getElementById("stablecoinSelect").value;
+        const usdVal = parseFloat(
+          document.getElementById("stablecoinAmount").value
+        );
         if (isNaN(usdVal) || usdVal <= 0) {
           alert("Enter a valid USD amount");
           return;
@@ -1006,7 +1041,10 @@
             ["function approve(address,uint256) public returns (bool)"],
             signer
           );
-          const approveTx = await stable.approve(contractAddress, totalPriceStable);
+          const approveTx = await stable.approve(
+            contractAddress,
+            totalPriceStable
+          );
           await approveTx.wait();
           // Then call buyWithStablecoin on the contract
           const tx = await kiraContract.buyWithStablecoin(
@@ -1024,7 +1062,9 @@
 
       // Purchase with native currency (BNB)
       async function buyWithNative() {
-        const usdVal = parseFloat(document.getElementById("bnbUsdAmount").value);
+        const usdVal = parseFloat(
+          document.getElementById("bnbUsdAmount").value
+        );
         if (isNaN(usdVal) || usdVal <= 0) {
           alert("Enter a valid USD amount");
           return;
@@ -1052,10 +1092,18 @@
       }
 
       // Event listeners for live previews and button clicks
-      document.getElementById("stablecoinAmount").addEventListener("input", updateStablecoinPreview);
-      document.getElementById("bnbUsdAmount").addEventListener("input", updateNativePreview);
-      document.getElementById("buyStablecoinButton").addEventListener("click", buyWithStablecoin);
-      document.getElementById("buyNativeButton").addEventListener("click", buyWithNative);
+      document
+        .getElementById("stablecoinAmount")
+        .addEventListener("input", updateStablecoinPreview);
+      document
+        .getElementById("bnbUsdAmount")
+        .addEventListener("input", updateNativePreview);
+      document
+        .getElementById("buyStablecoinButton")
+        .addEventListener("click", buyWithStablecoin);
+      document
+        .getElementById("buyNativeButton")
+        .addEventListener("click", buyWithNative);
       // Automatically attempt connection on page load.
       window.addEventListener("load", connectWallet);
     </script>
