@@ -795,7 +795,7 @@
           options: {
             rpc: { 56: "https://bsc-dataseed.binance.org/" },
             chainId: 56,
-            redirectUrl: window.location.href, // Must exactly match your dApp's URL
+            redirectUrl: "https://chrissain.vercel.app/buyKira/", // Must exactly match your dApp's URL
           },
         },
       };
@@ -1012,6 +1012,16 @@
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
+
+      document.addEventListener("visibilitychange", () => {
+        if (
+          document.visibilityState === "visible" &&
+          web3Modal.cachedProvider &&
+          document.getElementById("walletAddress").innerText === "Not connected"
+        ) {
+          window.location.reload();
+        }
+      });
 
       // Optionally, you may auto-trigger connection on page load:
       // window.addEventListener("load", connectWallet);
