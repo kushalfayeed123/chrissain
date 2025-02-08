@@ -51,7 +51,7 @@
         text-align: center;
         margin: 0.5rem;
       }
-      /* Connect Wallet button styling (displayed if not connected) */
+      /* Connect Wallet button styling */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -69,24 +69,7 @@
           Not connected
         </div>
       </div>
-      <!-- Connect Wallet Button (single button to trigger Web3Modal) -->
-      <button
-        id="connectWalletButton"
-        class="btn btn-primary"
-        style="display: block; margin: 1rem auto"
-      >
-        Connect Wallet
-      </button>
     </nav>
-
-    <!-- Warning for mobile browsers (if needed) -->
-    <div id="mobileWarning" style="display: none">
-      For optimal wallet connectivity on mobile devices, please use a
-      wallet-enabled browser.
-    </div>
-
-    <!-- Fallback Container for WalletConnect (if needed) -->
-    <div id="fallbackContainer"></div>
 
     <!-- Main Content -->
     <div class="container my-5">
@@ -159,7 +142,6 @@
             </button>
           </div>
         </div>
-
         <!-- Buy with Native Currency (BNB) -->
         <div class="col-md-6">
           <div class="card">
@@ -200,6 +182,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Single Connect Wallet Button -->
+    <button
+      id="connectWalletButton"
+      class="btn btn-primary"
+      style="display: block; margin: 1rem auto"
+    >
+      Connect Wallet
+    </button>
 
     <!-- JavaScript -->
     <script>
@@ -801,26 +792,29 @@
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Set up provider options for Web3Modal
+      // Set up provider options for Web3Modal (supports injected providers and WalletConnect)
       const providerOptions = {
         walletconnect: {
           package: WalletConnectProvider.default,
           options: {
             rpc: { 56: "https://bsc-dataseed.binance.org/" },
             chainId: 56,
+            // Provide a redirect URL so the wallet returns to the dApp after signing in.
+            redirectUrl: window.location.href,
           },
         },
       };
 
-      // Initialize Web3Modal
+      // Initialize Web3Modal with cacheProvider true so that sessions persist.
       const web3Modal = new window.Web3Modal.default({
-        cacheProvider: false,
+        cacheProvider: true,
         providerOptions,
       });
 
-      // Function to connect using Web3Modal (works for injected providers and WalletConnect)
+      // Function to connect wallet using Web3Modal.
       async function connectWallet() {
         try {
+          // This triggers the modal and lets the user select from all supported wallets.
           const instance = await web3Modal.connect();
           provider = new ethers.providers.Web3Provider(instance);
           signer = provider.getSigner();
@@ -832,14 +826,14 @@
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button once connected
+          // Hide the Connect Wallet button after a successful connection.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Update contract stats (dummy implementation; replace with your logic)
+      // Update contract stats (dummy implementation; replace with your own logic)
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
@@ -1002,16 +996,13 @@
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
 
-      // Attach event listener to the Connect Wallet button
+      // Attach event listener to the single Connect Wallet button.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
 
-      // Automatically attempt connection on page load (optional)
-      window.addEventListener("load", () => {
-        // Optionally, you can auto-trigger connectWallet() here.
-        // For now, we leave it for the user to tap the Connect Wallet button.
-      });
+      // Optionally, you could auto-trigger connectWallet() on load if desired.
+      // window.addEventListener("load", connectWallet);
     </script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
