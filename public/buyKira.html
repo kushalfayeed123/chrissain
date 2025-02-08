@@ -18,6 +18,8 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <!-- WalletConnect Provider (v1) -->
     <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
+    <!-- Web3Modal (v1) -->
+    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -39,16 +41,25 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Fallback container at the top of the page */
+      /* Fallback container styling */
       #fallbackContainer {
         text-align: center;
         margin: 1rem auto;
         max-width: 500px;
       }
+      #mobileWarning {
+        text-align: center;
+        margin: 0.5rem;
+      }
+      /* Connect Wallet button styling (displayed if not connected) */
+      #connectWalletButton {
+        display: block;
+        margin: 1rem auto;
+      }
     </style>
   </head>
   <body>
-    <!-- Navigation (automated connection; no connect button) -->
+    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
         <a class="navbar-brand fw-bold text-dark" href="#">
@@ -58,18 +69,26 @@
           Not connected
         </div>
       </div>
+      <!-- Connect Wallet Button (single button to trigger Web3Modal) -->
+      <button
+        id="connectWalletButton"
+        class="btn btn-primary"
+        style="display: block; margin: 1rem auto"
+      >
+        Connect Wallet
+      </button>
     </nav>
 
-    <!-- Fallback Container for WalletConnect fallback (displayed at the top if no injected provider) -->
-    <div id="fallbackContainer"></div>
-
-    <!-- Mobile Warning Banner (if needed) -->
-    <div id="mobileWarning" style="display: none; text-align: center">
-      For optimal wallet connectivity on mobile devices, please use the MetaMask
-      app's built-in browser or a supported wallet browser.
+    <!-- Warning for mobile browsers (if needed) -->
+    <div id="mobileWarning" style="display: none">
+      For optimal wallet connectivity on mobile devices, please use a
+      wallet-enabled browser.
     </div>
 
-    <!-- Main Container -->
+    <!-- Fallback Container for WalletConnect (if needed) -->
+    <div id="fallbackContainer"></div>
+
+    <!-- Main Content -->
     <div class="container my-5">
       <!-- Stats Section -->
       <div class="row g-4 mb-4">
@@ -92,6 +111,7 @@
           </div>
         </div>
       </div>
+
       <!-- Purchase Sections -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
@@ -139,6 +159,7 @@
             </button>
           </div>
         </div>
+
         <!-- Buy with Native Currency (BNB) -->
         <div class="col-md-6">
           <div class="card">
@@ -182,16 +203,16 @@
 
     <!-- JavaScript -->
     <script>
-      // Display mobile warning if needed
-      function isMobileChrome() {
+      // Show mobile warning if necessary
+      function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
-        return /Chrome/.test(ua) && /Mobile/.test(ua);
+        return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
       }
-      if (isMobileChrome()) {
+      if (isMobileBrowser()) {
         document.getElementById("mobileWarning").style.display = "block";
       }
 
-      // Global configuration – UPDATE THESE VALUES AS NEEDED FOR YOUR PROJECT!
+      // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
       // Replace with your actual contract ABI array
       const contractABI = [
@@ -779,169 +800,48 @@
       let currentPriceBN; // BigNumber (18 decimals)
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
-      let walletConnectProvider; // For WalletConnect
 
-      // Robust injected provider detection
-      function getInjectedProvider() {
-        if (typeof window === "undefined") return null;
-        if (window.ethereum) {
-          if (window.ethereum.isTrust) return window.ethereum;
-          if (
-            window.ethereum.providers &&
-            Array.isArray(window.ethereum.providers)
-          ) {
-            const trustProvider = window.ethereum.providers.find(
-              (p) => p.isTrust
-            );
-            if (trustProvider) return trustProvider;
-          }
-          return window.ethereum;
-        }
-        if (window.trustwallet) return window.trustwallet;
-        return null;
-      }
-
-      async function getInjectedProviderWithTimeout(timeout = 3000) {
-        let prov = getInjectedProvider();
-        if (prov) return prov;
-        return new Promise((resolve) => {
-          const handler = () => {
-            const p = getInjectedProvider();
-            if (p) resolve(p);
-          };
-          window.addEventListener("trustwallet#initialized", handler, {
-            once: true,
-          });
-          setTimeout(() => {
-            window.removeEventListener("trustwallet#initialized", handler, {
-              once: true,
-            });
-            resolve(getInjectedProvider());
-          }, timeout);
-        });
-      }
-
-      // Initialize WalletConnect provider using its full SDK with deep linking
-      async function initWalletConnectProvider() {
-        try {
-          // IMPORTANT: Update the RPC URL and chainId as needed for your project.
-          walletConnectProvider = new WalletConnectProvider.default({
-            rpc: {
-              56: "https://bsc-dataseed.binance.org/",
-            },
+      // Set up provider options for Web3Modal
+      const providerOptions = {
+        walletconnect: {
+          package: WalletConnectProvider.default,
+          options: {
+            rpc: { 56: "https://bsc-dataseed.binance.org/" },
             chainId: 56,
-            qrcode: false, // disable QR code modal to use deep linking
-          });
-          // If no session exists, create one manually.
-          if (!walletConnectProvider.connector.connected) {
-            await walletConnectProvider.connector.createSession();
-          }
-          // Retrieve the connection URI.
-          const uri = walletConnectProvider.connector.uri;
-          // Build a deep link URL for Trust Wallet (update if targeting another wallet)
-          const deepLink = "trust://wc?uri=" + encodeURIComponent(uri);
-          // Redirect to the deep link to open the wallet app.
-          window.location.href = deepLink;
-          // Wait for the user to complete connection in their wallet app.
-          await walletConnectProvider.enable();
-          // Use WalletConnect provider with ethers.js
-          provider = new ethers.providers.Web3Provider(walletConnectProvider);
-          signer = provider.getSigner();
-          kiraContract = new ethers.Contract(
-            contractAddress,
-            contractABI,
-            signer
-          );
-          await updateContractStats();
-          const address = await signer.getAddress();
-          document.getElementById("walletAddress").innerText = address;
-          // Clear fallback UI.
-          document.getElementById("fallbackContainer").innerHTML = "";
-          return true;
-        } catch (error) {
-          console.error("WalletConnect connection failed:", error);
-          return false;
-        }
-      }
+          },
+        },
+      };
 
-      // Updated initWeb3: Try injected provider first; if not, show WalletConnect fallback.
-      async function initWeb3() {
-        const injectedProvider = await getInjectedProviderWithTimeout();
-        if (injectedProvider) {
-          const tokenDetails = {
-            type: "ERC20",
-            options: {
-              address: contractAddress,
-              symbol: "kira",
-              decimals: 18,
-              image:
-                "https://firebasestorage.googleapis.com/v0/b/conw-e97be.firebasestorage.app/o/images%2Fkira-coin.png?alt=media&token=9b36fcde-7dc4-45b3-9969-96b0a20b6fc7",
-            },
-          };
-          injectedProvider
-            .request({
-              method: "wallet_watchAsset",
-              params: tokenDetails,
-            })
-            .then((wasAdded) => {
-              console.log(
-                wasAdded ? "Token added!" : "Token addition rejected"
-              );
-            })
-            .catch((error) => {
-              console.error("Error adding token:", error);
-            });
-          provider = new ethers.providers.Web3Provider(injectedProvider);
-          try {
-            await provider.send("eth_requestAccounts", []);
-          } catch (error) {
-            console.error("Wallet connection failed:", error);
-            document.getElementById("walletAddress").innerText =
-              "Connection failed";
-            return false;
-          }
-          signer = provider.getSigner();
-          kiraContract = new ethers.Contract(
-            contractAddress,
-            contractABI,
-            signer
-          );
-          await updateContractStats();
-          const address = await signer.getAddress();
-          document.getElementById("walletAddress").innerText = address;
-          return true;
-        } else {
-          // No injected provider found; show WalletConnect fallback at the top.
-          document.getElementById("walletAddress").innerText =
-            "No wallet detected";
-          const fallbackDiv = document.getElementById("fallbackContainer");
-          fallbackDiv.innerHTML = `
-            <p>No injected wallet was found. Please connect via WalletConnect.</p>
-            <button id="wcButton" class="btn btn-secondary">Connect with WalletConnect</button>
-          `;
-          document
-            .getElementById("wcButton")
-            .addEventListener("click", initWalletConnectProvider);
-          return false;
-        }
-      }
+      // Initialize Web3Modal
+      const web3Modal = new window.Web3Modal.default({
+        cacheProvider: false,
+        providerOptions,
+      });
 
-      // Since connection is automatic, we initialize on page load.
+      // Function to connect using Web3Modal (works for injected providers and WalletConnect)
       async function connectWallet() {
-        const connected = await initWeb3();
-        if (connected && signer) {
-          try {
-            const address = await signer.getAddress();
-            document.getElementById("walletAddress").innerText = address;
-          } catch (err) {
-            console.error("Error fetching address:", err);
-          }
+        try {
+          const instance = await web3Modal.connect();
+          provider = new ethers.providers.Web3Provider(instance);
+          signer = provider.getSigner();
+          kiraContract = new ethers.Contract(
+            contractAddress,
+            contractABI,
+            signer
+          );
+          await updateContractStats();
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
+          // Hide the Connect Wallet button once connected
+          document.getElementById("connectWalletButton").style.display = "none";
+        } catch (error) {
+          console.error("Wallet connection failed:", error);
         }
       }
 
+      // Update contract stats (dummy implementation; replace with your logic)
       async function updateContractStats() {
         try {
-          // Hardcoded adjustment value as a BigNumber with 18 decimals
           const adjustment = ethers.utils.parseUnits("47000000", 18);
           const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
@@ -956,7 +856,6 @@
           const adjustedSold = sold.add(adjustment);
           document.getElementById("totalSold").innerText =
             ethers.utils.formatUnits(adjustedSold, 18);
-          // Fetch BNB price from CoinGecko
           bnbPrice = await getBnbPrice();
         } catch (error) {
           console.error("Error updating contract stats:", error);
@@ -1035,7 +934,6 @@
         const tokenAmount = ethers.utils.parseUnits(kiraTokensStr, 18);
         const totalPriceStable = ethers.utils.parseUnits(usdVal.toString(), 18);
         try {
-          // Approve stablecoin transfer first
           const stable = new ethers.Contract(
             stablecoins[stablecoinSelect].address,
             ["function approve(address,uint256) public returns (bool)"],
@@ -1046,7 +944,6 @@
             totalPriceStable
           );
           await approveTx.wait();
-          // Then call buyWithStablecoin on the contract
           const tx = await kiraContract.buyWithStablecoin(
             stablecoins[stablecoinSelect].address,
             tokenAmount
@@ -1091,7 +988,7 @@
         }
       }
 
-      // Event listeners for live previews and button clicks
+      // Attach event listeners for input and purchase buttons
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -1104,8 +1001,17 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
-      // Automatically attempt connection on page load.
-      window.addEventListener("load", connectWallet);
+
+      // Attach event listener to the Connect Wallet button
+      document
+        .getElementById("connectWalletButton")
+        .addEventListener("click", connectWallet);
+
+      // Automatically attempt connection on page load (optional)
+      window.addEventListener("load", () => {
+        // Optionally, you can auto-trigger connectWallet() here.
+        // For now, we leave it for the user to tap the Connect Wallet button.
+      });
     </script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
