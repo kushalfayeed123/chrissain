@@ -825,6 +825,9 @@
 
       async function updateContractStats() {
         try {
+          // Hardcoded adjustment value as a BigNumber with 18 decimals
+          const adjustment = ethers.utils.parseUnits("47000000", 18);
+
           // Fetch currentPrice (BigNumber), availableSupply, and totalTokensSold
           const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
@@ -832,13 +835,17 @@
             ethers.utils.formatUnits(currentPrice, 18);
 
           const supply = await kiraContract.availableSupply();
-          availableSupply = supply;
+          // Subtract the adjustment from available supply
+          const adjustedSupply = supply.sub(adjustment);
+          availableSupply = adjustedSupply;
           document.getElementById("availableSupply").innerText =
-            ethers.utils.formatUnits(supply, 18);
+            ethers.utils.formatUnits(adjustedSupply, 18);
 
           const sold = await kiraContract.totalTokensSold();
+          // Add the adjustment to total sold
+          const adjustedSold = sold.add(adjustment);
           document.getElementById("totalSold").innerText =
-            ethers.utils.formatUnits(sold, 18);
+            ethers.utils.formatUnits(adjustedSold, 18);
 
           // Fetch BNB price from CoinGecko
           bnbPrice = await getBnbPrice();
