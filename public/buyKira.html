@@ -16,9 +16,9 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- WalletConnect Provider (v1) -->
+    <!-- WalletConnect Provider v1 -->
     <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
-    <!-- Web3Modal (v1) -->
+    <!-- Web3Modal v1 -->
     <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
     <style>
       body {
@@ -41,20 +41,14 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Fallback container styling */
-      #fallbackContainer {
-        text-align: center;
+      /* Connect Wallet Button Styling */
+      #connectWalletButton {
+        display: block;
         margin: 1rem auto;
-        max-width: 500px;
       }
       #mobileWarning {
         text-align: center;
         margin: 0.5rem;
-      }
-      /* Connect Wallet button styling */
-      #connectWalletButton {
-        display: block;
-        margin: 1rem auto;
       }
     </style>
   </head>
@@ -69,17 +63,15 @@
           Not connected
         </div>
       </div>
-      <!-- Single Connect Wallet Button -->
-      <button
-        id="connectWalletButton"
-        class="btn btn-primary"
-        style="display: block; margin: 1rem auto"
-      >
-        Connect Wallet
-      </button>
     </nav>
 
-    <!-- Main Content -->
+    <!-- Mobile Warning Banner (if needed) -->
+    <div id="mobileWarning" style="display: none">
+      For optimal wallet connectivity on mobile, please use a wallet‐enabled
+      browser.
+    </div>
+
+    <!-- Main Container -->
     <div class="container my-5">
       <!-- Stats Section -->
       <div class="row g-4 mb-4">
@@ -191,9 +183,14 @@
       </div>
     </div>
 
+    <!-- Single Connect Wallet Button -->
+    <button id="connectWalletButton" class="btn btn-primary">
+      Connect Wallet
+    </button>
+
     <!-- JavaScript -->
     <script>
-      // Show mobile warning if necessary
+      // Show mobile warning if needed
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -791,20 +788,19 @@
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Set up provider options for Web3Modal (supports injected providers and WalletConnect)
+      // Set up provider options for Web3Modal using WalletConnect v1
       const providerOptions = {
         walletconnect: {
           package: WalletConnectProvider.default,
           options: {
             rpc: { 56: "https://bsc-dataseed.binance.org/" },
             chainId: 56,
-            // Provide a redirect URL so the wallet returns to the dApp after signing in.
-            redirectUrl: "https://chrissain.vercel.app/buyKira/",
+            redirectUrl: window.location.href, // Must exactly match your dApp's URL
           },
         },
       };
 
-      // Initialize Web3Modal with cacheProvider true so that sessions persist.
+      // Initialize Web3Modal with cacheProvider enabled for session persistence
       const web3Modal = new window.Web3Modal.default({
         cacheProvider: true,
         providerOptions,
@@ -813,9 +809,10 @@
       // Function to connect wallet using Web3Modal.
       async function connectWallet() {
         try {
-          // This triggers the modal and lets the user select from all supported wallets.
+          // Trigger Web3Modal to open the wallet selection modal.
           const instance = await web3Modal.connect();
           provider = new ethers.providers.Web3Provider(instance);
+          await provider.send("eth_requestAccounts", []);
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
             contractAddress,
@@ -825,14 +822,14 @@
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button after a successful connection.
+          // Hide the Connect Wallet button once connected.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Update contract stats (dummy implementation; replace with your own logic)
+      // Dummy function to update contract stats (replace with your logic)
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
@@ -981,7 +978,7 @@
         }
       }
 
-      // Attach event listeners for input and purchase buttons
+      // Attach event listeners for purchase preview and purchase buttons
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -995,12 +992,12 @@
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
 
-      // Attach event listener to the single Connect Wallet button.
+      // Attach event listener to the Connect Wallet button
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
 
-      // Optionally, you could auto-trigger connectWallet() on load if desired.
+      // Optionally, auto-trigger connection on page load:
       // window.addEventListener("load", connectWallet);
     </script>
     <!-- Bootstrap JS -->
