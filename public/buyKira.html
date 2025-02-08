@@ -32,7 +32,10 @@
         padding: 1.5rem;
       }
       .bg-primary {
-        background-color: #2563eb !important;
+        background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
+      }
+      .btn-primary {
+        background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
     </style>
   </head>
@@ -470,7 +473,11 @@
         {
           inputs: [
             { internalType: "address", name: "token", type: "address" },
-            { internalType: "uint256", name: "tokenDecimals", type: "uint256" },
+            {
+              internalType: "uint256",
+              name: "tokenDecimals",
+              type: "uint256",
+            },
           ],
           name: "addStablecoin",
           outputs: [],
@@ -618,7 +625,11 @@
         {
           inputs: [
             { internalType: "address", name: "_recipient", type: "address" },
-            { internalType: "uint256", name: "_nativeAmount", type: "uint256" },
+            {
+              internalType: "uint256",
+              name: "_nativeAmount",
+              type: "uint256",
+            },
           ],
           name: "reconcileNativeCoinAccounts",
           outputs: [],
@@ -657,7 +668,11 @@
         {
           inputs: [
             { internalType: "uint256", name: "newStep", type: "uint256" },
-            { internalType: "uint256", name: "newMultiplier", type: "uint256" },
+            {
+              internalType: "uint256",
+              name: "newMultiplier",
+              type: "uint256",
+            },
           ],
           name: "setPriceParams",
           outputs: [],
@@ -825,6 +840,9 @@
 
       async function updateContractStats() {
         try {
+          // Hardcoded adjustment value as a BigNumber with 18 decimals
+          const adjustment = ethers.utils.parseUnits("47000000", 18);
+
           // Fetch currentPrice (BigNumber), availableSupply, and totalTokensSold
           const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
@@ -832,13 +850,17 @@
             ethers.utils.formatUnits(currentPrice, 18);
 
           const supply = await kiraContract.availableSupply();
-          availableSupply = supply;
+          // Subtract the adjustment from available supply
+          const adjustedSupply = supply.sub(adjustment);
+          availableSupply = adjustedSupply;
           document.getElementById("availableSupply").innerText =
-            ethers.utils.formatUnits(supply, 18);
+            ethers.utils.formatUnits(adjustedSupply, 18);
 
           const sold = await kiraContract.totalTokensSold();
+          // Add the adjustment to total sold
+          const adjustedSold = sold.add(adjustment);
           document.getElementById("totalSold").innerText =
-            ethers.utils.formatUnits(sold, 18);
+            ethers.utils.formatUnits(adjustedSold, 18);
 
           // Fetch BNB price from CoinGecko
           bnbPrice = await getBnbPrice();
