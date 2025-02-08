@@ -41,7 +41,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Connect Wallet Button Styling */
+      /* Connect Wallet Button styling */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -65,7 +65,7 @@
       </div>
     </nav>
 
-    <!-- Mobile Warning Banner (if needed) -->
+    <!-- Mobile Warning Banner -->
     <div id="mobileWarning" style="display: none">
       For optimal wallet connectivity on mobile, please use a wallet‐enabled
       browser.
@@ -95,7 +95,7 @@
         </div>
       </div>
 
-      <!-- Purchase Sections -->
+      <!-- Purchase Sections (your existing purchase code remains unchanged) -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
         <div class="col-md-6">
@@ -800,7 +800,7 @@
         },
       };
 
-      // Initialize Web3Modal with cacheProvider enabled for session persistence
+      // Initialize Web3Modal with session caching enabled.
       const web3Modal = new window.Web3Modal.default({
         cacheProvider: true,
         providerOptions,
@@ -809,7 +809,6 @@
       // Function to connect wallet using Web3Modal.
       async function connectWallet() {
         try {
-          // Trigger Web3Modal to open the wallet selection modal.
           const instance = await web3Modal.connect();
           provider = new ethers.providers.Web3Provider(instance);
           await provider.send("eth_requestAccounts", []);
@@ -828,6 +827,23 @@
           console.error("Wallet connection failed:", error);
         }
       }
+
+      // Visibility change workaround: when the page becomes visible again,
+      // if a cached provider is detected but stats are not loaded, force a reload.
+      document.addEventListener("visibilitychange", () => {
+        if (
+          document.visibilityState === "visible" &&
+          web3Modal.cachedProvider
+        ) {
+          // Optionally check if walletAddress is still "Not connected"
+          if (
+            document.getElementById("walletAddress").innerText ===
+            "Not connected"
+          ) {
+            window.location.reload();
+          }
+        }
+      });
 
       // Dummy function to update contract stats (replace with your logic)
       async function updateContractStats() {
@@ -978,7 +994,7 @@
         }
       }
 
-      // Attach event listeners for purchase preview and purchase buttons
+      // Attach event listeners for purchase inputs and buttons.
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -992,12 +1008,12 @@
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
 
-      // Attach event listener to the Connect Wallet button
+      // Attach event listener to the Connect Wallet button.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
 
-      // Optionally, auto-trigger connection on page load:
+      // Optionally, you may auto-trigger connection on page load:
       // window.addEventListener("load", connectWallet);
     </script>
     <!-- Bootstrap JS -->
