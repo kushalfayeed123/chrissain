@@ -51,13 +51,6 @@
     </style>
   </head>
   <body>
-    <!-- Connect Wallet Button at the Top -->
-    <div style="text-align: center; margin-top: 1rem">
-      <button id="connectWalletButton" class="btn btn-primary">
-        Connect Wallet
-      </button>
-    </div>
-
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
@@ -67,6 +60,12 @@
         <div id="walletAddress" class="badge bg-light text-dark p-2">
           Not connected
         </div>
+      </div>
+      <!-- Connect Wallet Button at the Top -->
+      <div style="text-align: center; margin-top: 1rem">
+        <button id="connectWalletButton" class="btn btn-primary">
+          Connect Wallet
+        </button>
       </div>
     </nav>
 
@@ -772,7 +771,7 @@
         { stateMutability: "payable", type: "receive" },
       ];
 
-      // Example stablecoin config (BUSD & USDT on BSC)
+      // Example stablecoin configuration (BUSD & USDT on BSC)
       const stablecoins = {
         BUSD: {
           address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
@@ -809,22 +808,22 @@
       // Function to connect the wallet.
       async function connectWallet() {
         try {
-          // First try injected provider (e.g. MetaMask in a DApp browser)
+          // First try to use an injected provider (if available)
           const injected = await getInjectedProviderWithTimeout();
           if (injected) {
             provider = new ethers.providers.Web3Provider(injected);
             await provider.send("eth_requestAccounts", []);
           } else {
             // If no injected provider, use WalletConnect v2.
-            // IMPORTANT: Replace "YOUR_PROJECT_ID" with your actual WalletConnect v2 project ID.
+            // IMPORTANT: Replace "YOUR_PROJECT_ID" with your actual project ID from walletconnect.com.
             const wcProvider = await WalletConnectEthereumProvider.init({
               projectId: "35ee0797cf298b1835906b5a22bc50e5",
               chains: [56], // Binance Smart Chain
-              showQrModal: true, // Will show QR modal on desktop; on mobile deep linking may occur.
+              showQrModal: true, // Will show a QR code modal on desktop; mobile may use deep linking.
               redirectUrl: window.location.href, // Must exactly match your dApp's URL.
               metadata: {
                 name: "KiraCoin Exchange",
-                description: "Connect to exchange",
+                description: "Connect to KiraCoin Exchange",
                 url: window.location.href,
                 icons: [],
               },
@@ -841,14 +840,15 @@
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button after connection.
+          // Hide the Connect Wallet button once connected.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Visibility change workaround: when the page becomes visible (user returns from wallet app), force a reload if needed.
+      // Visibility change workaround: when the page becomes visible (e.g., after returning from the wallet app),
+      // if the wallet isn't rehydrated, force a reload.
       document.addEventListener("visibilitychange", () => {
         if (
           document.visibilityState === "visible" &&
@@ -1008,7 +1008,7 @@
         }
       }
 
-      // Attach event listeners for purchase preview and purchase buttons.
+      // Attach event listeners for purchase preview and buttons.
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
