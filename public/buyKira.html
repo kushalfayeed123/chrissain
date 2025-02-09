@@ -16,8 +16,8 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- WalletConnect Ethereum Provider v2 (UMD build) -->
-    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.1.8/dist/umd/index.min.js"></script>
+    <!-- Coinbase Wallet SDK (UMD build) -->
+    <script src="https://unpkg.com/@coinbase/wallet-sdk/dist/wallet-sdk.umd.min.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -39,7 +39,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Place Connect Wallet button at the very top */
+      /* Connect Wallet button placed at the very top */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -191,7 +191,7 @@
 
     <!-- JavaScript -->
     <script>
-      // Debug: Log a message when the button is clicked.
+      // Debug log to confirm button click.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", () => {
@@ -199,7 +199,7 @@
           connectWallet();
         });
 
-      // Show mobile warning if needed.
+      // Show mobile warning if necessary.
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -208,7 +208,7 @@
         document.getElementById("mobileWarning").style.display = "block";
       }
 
-      // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
+      // Global configuration – update these values for your project.
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
       // Replace with your actual contract ABI array.
       const contractABI = [
@@ -814,35 +814,36 @@
         });
       }
 
-      // Function to connect the wallet.
+      // Function to connect wallet.
       async function connectWallet() {
         try {
-          // First try to use an injected provider.
+          // First, try using an injected provider.
           const injected = await getInjectedProviderWithTimeout();
           if (injected) {
             console.log("Injected provider found.");
             provider = new ethers.providers.Web3Provider(injected);
             await provider.send("eth_requestAccounts", []);
           } else {
-            console.log("No injected provider; using WalletConnect v2.");
-            // Use WalletConnect v2 via the UMD global.
-            // IMPORTANT: Replace "35ee0797cf298b1835906b5a22bc50e5" with your actual project ID.
-            const wcProvider =
-              await window.WalletConnectEthereumProvider.default.init({
-                projectId: "35ee0797cf298b1835906b5a22bc50e5",
-                chains: [56], // Binance Smart Chain
-                showQrModal: true, // Show QR modal on desktop; deep linking on mobile.
-                redirectUrl: window.location.href, // Must exactly match your dApp's URL.
-                metadata: {
-                  name: "KiraCoin Exchange",
-                  description: "Connect to KiraCoin Exchange",
-                  url: window.location.href,
-                  icons: [],
-                },
-              });
-            console.log("WalletConnect v2 provider initialized.");
-            await wcProvider.enable();
-            provider = new ethers.providers.Web3Provider(wcProvider);
+            console.log(
+              "No injected provider; using Coinbase Wallet SDK fallback."
+            );
+            // Use Coinbase Wallet SDK as a fallback.
+            const APP_NAME = "KiraCoin Exchange";
+            const APP_LOGO_URL = "https://example.com/logo.png"; // Update with your logo URL.
+            const DEFAULT_CHAIN_ID = 56; // Binance Smart Chain.
+            const coinbaseWallet = new window.CoinbaseWalletSDK({
+              appName: APP_NAME,
+              appLogoUrl: APP_LOGO_URL,
+              darkMode: false,
+            });
+            // Create a provider instance; update the RPC URL if needed.
+            provider = new ethers.providers.Web3Provider(
+              coinbaseWallet.makeWeb3Provider(
+                "https://bsc-dataseed.binance.org/",
+                DEFAULT_CHAIN_ID
+              )
+            );
+            await provider.send("eth_requestAccounts", []);
           }
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
@@ -854,14 +855,14 @@
           const address = await signer.getAddress();
           console.log("Connected address:", address);
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button once connected.
+          // Hide the Connect Wallet button after successful connection.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Visibility change workaround: force reload if user returns from wallet app.
+      // Visibility change workaround: force reload if user returns from wallet app and no connection detected.
       document.addEventListener("visibilitychange", () => {
         if (
           document.visibilityState === "visible" &&
@@ -877,7 +878,10 @@
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
-          const currentPrice = await kiraContract.currentPrice();
+          const currentPrice = ethers.utils.parseUnits(
+            kiraUsdPrice.toString(),
+            18
+          );
           currentPriceBN = currentPrice;
           document.getElementById("currentPrice").innerText =
             ethers.utils.formatUnits(currentPrice, 18);
