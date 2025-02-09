@@ -42,6 +42,7 @@
         text-align: center;
         margin: 1rem auto;
         max-width: 500px;
+        display: none;
       }
       #mobileWarning {
         text-align: center;
@@ -49,7 +50,7 @@
         color: red;
         font-weight: bold;
       }
-      /* Connect Wallet button styling (displayed if not connected) */
+      /* Connect Wallet button styling */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -67,6 +68,7 @@
           Not connected
         </div>
       </div>
+
       <!-- Connect Wallet Button -->
       <button
         id="connectWalletButton"
@@ -77,14 +79,14 @@
       </button>
     </nav>
 
-    <!-- Warning for mobile browsers (if needed) -->
+    <!-- Warning for mobile browsers -->
     <div id="mobileWarning" style="display: none">
       For optimal wallet connectivity, please launch this app in a
       wallet‑enabled browser.
     </div>
 
-    <!-- Fallback Container (if no injected provider) -->
-    <div id="fallbackContainer" style="display: none">
+    <!-- Fallback Container if no injected provider -->
+    <div id="fallbackContainer">
       <p>
         Please open this dApp in a wallet‑enabled browser (e.g. MetaMask, Trust
         Wallet, Opera, or Phantom with EVM support) to connect your wallet.
@@ -115,7 +117,7 @@
         </div>
       </div>
 
-      <!-- Purchase Sections (same as before) -->
+      <!-- Purchase Sections -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
         <div class="col-md-6">
@@ -206,7 +208,7 @@
 
     <!-- JavaScript -->
     <script>
-      // Show mobile warning if necessary (you might adjust this based on testing)
+      // Show mobile warning if necessary
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -217,7 +219,7 @@
 
       // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Set your contract's ABI here (replace with your actual ABI)
+      // Insert your full contract ABI below
       const contractABI = [
         {
           inputs: [
@@ -791,7 +793,7 @@
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Connect using injected provider only
+      // Connect using the injected provider only (window.ethereum)
       async function connectWallet() {
         if (typeof window.ethereum === "undefined") {
           // No injected provider; show fallback message
@@ -802,22 +804,15 @@
           // Request account access
           await window.ethereum.request({ method: "eth_requestAccounts" });
           provider = new ethers.providers.Web3Provider(window.ethereum);
-          // Check network
+          // Check the network
           const network = await provider.getNetwork();
           console.log("Connected network:", network);
           if (network.chainId !== 56) {
-            try {
-              // Prompt user to switch to BSC mainnet
-              await window.ethereum.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: "0x38" }], // 0x38 is 56 in hex
-              });
-            } catch (switchError) {
-              alert(
-                "Please switch your wallet network to Binance Smart Chain Mainnet."
-              );
-              return;
-            }
+            // Trust Wallet may not support programmatic switching.
+            alert(
+              "Please switch your wallet network to Binance Smart Chain Mainnet for full functionality."
+            );
+            return;
           }
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
@@ -835,7 +830,7 @@
         }
       }
 
-      // Update contract stats (dummy implementation; replace with your logic)
+      // Update contract stats (dummy implementation; replace with your actual logic)
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
@@ -984,7 +979,7 @@
         }
       }
 
-      // Attach event listeners for input and purchase buttons
+      // Attach event listeners
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
