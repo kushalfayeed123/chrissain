@@ -16,10 +16,8 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- WalletConnect Provider v1 -->
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
-    <!-- Web3Modal v1 -->
-    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
+    <!-- WalletConnect Ethereum Provider v2 -->
+    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.1.8/dist/umd/index.min.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -41,7 +39,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Connect Wallet Button styling */
+      /* Connect Wallet button styling */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -69,9 +67,9 @@
       </button>
     </nav>
 
-    <!-- Mobile Warning Banner -->
+    <!-- Mobile Warning Banner (if needed) -->
     <div id="mobileWarning" style="display: none">
-      For optimal wallet connectivity on mobile, please use a wallet‐enabled
+      For optimal wallet connectivity on mobile, please use a wallet‑enabled
       browser.
     </div>
 
@@ -99,7 +97,7 @@
         </div>
       </div>
 
-      <!-- Purchase Sections (your existing purchase code remains unchanged) -->
+      <!-- Purchase Sections (your existing purchase UI remains here) -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
         <div class="col-md-6">
@@ -189,7 +187,7 @@
 
     <!-- JavaScript -->
     <script>
-      // Show mobile warning if needed
+      // Show mobile warning if needed.
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -200,7 +198,7 @@
 
       // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Replace with your actual contract ABI array
+      // Replace with your actual contract ABI.
       const contractABI = [
         {
           inputs: [
@@ -780,37 +778,55 @@
           decimals: 18,
         },
       };
-      // Assumed conversion rate: 1 KIRA = $100 USD
-      const kiraUsdPrice = 100;
+      const kiraUsdPrice = 100; // 1 KIRA = $100 USD
       let kiraContract, provider, signer;
       let currentPriceBN; // BigNumber (18 decimals)
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Set up provider options for Web3Modal using WalletConnect v1
-      const providerOptions = {
-        walletconnect: {
-          package: WalletConnectProvider.default,
-          options: {
-            rpc: { 56: "https://bsc-dataseed.binance.org/" },
-            chainId: 56,
-            redirectUrl: "https://chrissain.vercel.app/buyKira/", // Must exactly match your dApp's URL
-          },
-        },
-      };
+      // Function to check for an injected provider.
+      function getInjectedProvider() {
+        if (typeof window === "undefined") return null;
+        if (window.ethereum) return window.ethereum;
+        return null;
+      }
 
-      // Initialize Web3Modal with session caching enabled.
-      const web3Modal = new window.Web3Modal.default({
-        cacheProvider: true,
-        providerOptions,
-      });
+      async function getInjectedProviderWithTimeout(timeout = 3000) {
+        let prov = getInjectedProvider();
+        if (prov) return prov;
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(getInjectedProvider());
+          }, timeout);
+        });
+      }
 
-      // Function to connect wallet using Web3Modal.
+      // Function to connect wallet.
       async function connectWallet() {
         try {
-          const instance = await web3Modal.connect();
-          provider = new ethers.providers.Web3Provider(instance);
-          await provider.send("eth_requestAccounts", []);
+          // First, try to use an injected provider.
+          const injected = await getInjectedProviderWithTimeout();
+          if (injected) {
+            provider = new ethers.providers.Web3Provider(injected);
+            await provider.send("eth_requestAccounts", []);
+          } else {
+            // If no injected provider, use WalletConnect v2.
+            // Replace "YOUR_PROJECT_ID" with your actual WalletConnect v2 project ID.
+            const wcProvider = await WalletConnectEthereumProvider.init({
+              projectId: "35ee0797cf298b1835906b5a22bc50e5",
+              chains: [56], // Binance Smart Chain
+              showQrModal: false, // Set to true to show QR modal on desktop; on mobile, deep linking may occur.
+              redirectUrl: window.location.href, // Must match your dApp's URL exactly.
+              metadata: {
+                name: "KiraCoin Exchange",
+                description: "Decentralized exchange for KIRA tokens",
+                url: window.location.href,
+                icons: [],
+              },
+            });
+            await wcProvider.enable();
+            provider = new ethers.providers.Web3Provider(wcProvider);
+          }
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
             contractAddress,
@@ -820,21 +836,20 @@
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button once connected.
+          // Hide the connect button after successful connection.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Visibility change workaround: when the page becomes visible again,
-      // if a cached provider is detected but stats are not loaded, force a reload.
+      // Workaround: when the page becomes visible (i.e. after returning from wallet app),
+      // force a reload if a cached provider exists but no connection is detected.
       document.addEventListener("visibilitychange", () => {
         if (
           document.visibilityState === "visible" &&
           web3Modal.cachedProvider
         ) {
-          // Optionally check if walletAddress is still "Not connected"
           if (
             document.getElementById("walletAddress").innerText ===
             "Not connected"
@@ -844,11 +859,14 @@
         }
       });
 
-      // Dummy function to update contract stats (replace with your logic)
+      // Dummy function to update contract stats (replace with your own logic)
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
-          const currentPrice = await kiraContract.currentPrice();
+          const currentPrice = ethers.utils.parseUnits(
+            kiraUsdPrice.toString(),
+            18
+          );
           currentPriceBN = currentPrice;
           document.getElementById("currentPrice").innerText =
             ethers.utils.formatUnits(currentPrice, 18);
@@ -880,7 +898,7 @@
         }
       }
 
-      // Update preview for stablecoin purchase
+      // Update preview for stablecoin purchase.
       function updateStablecoinPreview() {
         const usdVal = parseFloat(
           document.getElementById("stablecoinAmount").value
@@ -897,7 +915,7 @@
           "$" + usdVal.toFixed(2);
       }
 
-      // Update preview for native (BNB) purchase
+      // Update preview for native (BNB) purchase.
       async function updateNativePreview() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -923,7 +941,7 @@
           bnbEquivalent.toFixed(6);
       }
 
-      // Purchase with stablecoin
+      // Purchase with stablecoin.
       async function buyWithStablecoin() {
         const stablecoinSelect =
           document.getElementById("stablecoinSelect").value;
@@ -962,7 +980,7 @@
         }
       }
 
-      // Purchase with native currency (BNB)
+      // Purchase with native currency (BNB).
       async function buyWithNative() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -993,7 +1011,7 @@
         }
       }
 
-      // Attach event listeners for purchase inputs and buttons.
+      // Attach event listeners.
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -1006,23 +1024,11 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
-
-      // Attach event listener to the Connect Wallet button.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
 
-      document.addEventListener("visibilitychange", () => {
-        if (
-          document.visibilityState === "visible" &&
-          web3Modal.cachedProvider &&
-          document.getElementById("walletAddress").innerText === "Not connected"
-        ) {
-          window.location.reload();
-        }
-      });
-
-      // Optionally, you may auto-trigger connection on page load:
+      // Optionally, auto-trigger connection on page load:
       // window.addEventListener("load", connectWallet);
     </script>
     <!-- Bootstrap JS -->
