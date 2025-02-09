@@ -39,7 +39,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Connect Wallet button placed at the very top */
+      /* Place Connect Wallet button at the very top */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -191,6 +191,14 @@
 
     <!-- JavaScript -->
     <script>
+      // Debug: Log a message when the button is clicked.
+      document
+        .getElementById("connectWalletButton")
+        .addEventListener("click", () => {
+          console.log("Connect Wallet button clicked.");
+          connectWallet();
+        });
+
       // Show mobile warning if needed.
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -809,19 +817,21 @@
       // Function to connect the wallet.
       async function connectWallet() {
         try {
-          // Try using an injected provider first.
+          // First try to use an injected provider.
           const injected = await getInjectedProviderWithTimeout();
           if (injected) {
+            console.log("Injected provider found.");
             provider = new ethers.providers.Web3Provider(injected);
             await provider.send("eth_requestAccounts", []);
           } else {
-            // If no injected provider, use WalletConnect v2.
-            // IMPORTANT: Replace "YOUR_PROJECT_ID" with your actual project ID.
+            console.log("No injected provider; using WalletConnect v2.");
+            // Use WalletConnect v2 via the UMD global.
+            // IMPORTANT: Replace "35ee0797cf298b1835906b5a22bc50e5" with your actual project ID.
             const wcProvider =
               await window.WalletConnectEthereumProvider.default.init({
                 projectId: "35ee0797cf298b1835906b5a22bc50e5",
                 chains: [56], // Binance Smart Chain
-                showQrModal: true, // Shows a QR modal on desktop; on mobile deep linking is used.
+                showQrModal: true, // Show QR modal on desktop; deep linking on mobile.
                 redirectUrl: window.location.href, // Must exactly match your dApp's URL.
                 metadata: {
                   name: "KiraCoin Exchange",
@@ -830,6 +840,7 @@
                   icons: [],
                 },
               });
+            console.log("WalletConnect v2 provider initialized.");
             await wcProvider.enable();
             provider = new ethers.providers.Web3Provider(wcProvider);
           }
@@ -841,21 +852,23 @@
           );
           await updateContractStats();
           const address = await signer.getAddress();
+          console.log("Connected address:", address);
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button after successful connection.
+          // Hide the Connect Wallet button once connected.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Visibility change workaround: force reload when returning from wallet app.
+      // Visibility change workaround: force reload if user returns from wallet app.
       document.addEventListener("visibilitychange", () => {
         if (
           document.visibilityState === "visible" &&
           provider &&
           document.getElementById("walletAddress").innerText === "Not connected"
         ) {
+          console.log("Visibility change detected; reloading page.");
           window.location.reload();
         }
       });
