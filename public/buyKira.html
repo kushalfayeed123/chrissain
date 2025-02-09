@@ -819,12 +819,12 @@
             const wcProvider = await WalletConnectEthereumProvider.init({
               projectId: "35ee0797cf298b1835906b5a22bc50e5",
               chains: [56], // Binance Smart Chain
-              showQrModal: true, // Will show a QR code modal on desktop; mobile may use deep linking.
-              redirectUrl: window.location.href, // Must exactly match your dApp's URL.
+              showQrModal: false, // Will show a QR code modal on desktop; mobile may use deep linking.
+              redirectUrl: "https://chrissain.vercel.app/buyKira/", // Must exactly match your dApp's URL.
               metadata: {
                 name: "KiraCoin Exchange",
                 description: "Connect to KiraCoin Exchange",
-                url: window.location.href,
+                url: "https://chrissain.vercel.app",
                 icons: [],
               },
             });
