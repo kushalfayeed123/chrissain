@@ -16,12 +16,8 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- WalletConnect Ethereum Provider v2 -->
+    <!-- WalletConnect Ethereum Provider v2 (UMD build) -->
     <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.1.8/dist/umd/index.min.js"></script>
-    <!-- Reown AppKit libraries (UMD builds) -->
-    <script src="https://unpkg.com/@reown/appkit@latest/dist/index.umd.min.js"></script>
-    <script src="https://unpkg.com/@reown/appkit-adapter-wagmi@latest/dist/index.umd.min.js"></script>
-    <script src="https://unpkg.com/@reown/appkit/networks@latest/dist/index.umd.min.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -44,7 +40,7 @@
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
       /* Connect Wallet button placed at the very top */
-      #open-connect-modal {
+      #connectWalletButton {
         display: block;
         margin: 1rem auto;
       }
@@ -57,7 +53,7 @@
   <body>
     <!-- Connect Wallet Button at the Top -->
     <div style="text-align: center; margin-top: 1rem">
-      <button id="open-connect-modal" class="btn btn-primary">
+      <button id="connectWalletButton" class="btn btn-primary">
         Connect Wallet
       </button>
     </div>
@@ -193,58 +189,20 @@
       </div>
     </div>
 
-    <!-- Reown AppKit Integration for WalletConnect v2 -->
+    <!-- JavaScript -->
     <script>
-      // 1. Set up Reown AppKit using WalletConnect v2.
-      // Get your project ID at https://cloud.reown.com
-      const projectId = "35ee0797cf298b1835906b5a22bc50e5";
+      // Show mobile warning if needed.
+      function isMobileBrowser() {
+        const ua = navigator.userAgent || navigator.vendor || window.opera;
+        return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
+      }
+      if (isMobileBrowser()) {
+        document.getElementById("mobileWarning").style.display = "block";
+      }
 
-      // 2. Load networks from Reown AppKit (using mainnet and arbitrum as examples)
-      const { mainnet, arbitrum } = window.ReownNetworks;
-      const networks = [mainnet, arbitrum];
-
-      // 3. Set up the Wagmi adapter.
-      const wagmiAdapter = new window.ReownAppkitAdapterWagmi.WagmiAdapter({
-        projectId,
-        networks,
-      });
-
-      // 4. Configure metadata (ensure the URL exactly matches your domain).
-      const metadata = {
-        name: "kira",
-        description: "AppKit Example",
-        url: "https://chrissain.vercel.app/", // Change to your domain
-        icons: ["https://assets.reown.com/reown-profile-pic.png"],
-      };
-
-      // 5. Create the modal with Reown AppKit (which uses WalletConnect v2 under the hood).
-      const modal = window.ReownAppkit.createAppKit({
-        adapters: [wagmiAdapter],
-        networks,
-        metadata,
-        projectId,
-        features: {
-          analytics: true, // Optional
-        },
-      });
-
-      // 6. Bind the Connect Wallet button to open the modal.
-      const openConnectModalBtn = document.getElementById("open-connect-modal");
-      openConnectModalBtn.addEventListener("click", () => {
-        modal.open();
-      });
-
-      // 7. Listen for connection events (if provided by the adapter) to update the UI.
-      // For example, when connected, update the wallet address and initialize contract integration.
-      modal.on("connect", (account) => {
-        document.getElementById("walletAddress").innerText = account;
-        // Optionally initialize your contract calls here.
-        initContract();
-      });
-
-      // 8. Contract Integration.
-      // Update these values with your actual contract address and ABI.
-      const dappContractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
+      // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
+      const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
+      // Replace with your actual contract ABI array.
       const contractABI = [
         {
           inputs: [
@@ -814,41 +772,131 @@
         { stateMutability: "payable", type: "receive" },
       ];
 
-      let dappContract, ethersProvider, ethersSigner;
+      // Example stablecoin configuration (BUSD & USDT on BSC).
+      const stablecoins = {
+        BUSD: {
+          address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+          decimals: 18,
+        },
+        USDT: {
+          address: "0x55d398326f99059fF775485246999027B3197955",
+          decimals: 18,
+        },
+      };
+      const kiraUsdPrice = 100; // 1 KIRA = $100 USD.
 
-      async function initContract() {
+      let kiraContract, provider, signer;
+      let currentPriceBN; // BigNumber (18 decimals)
+      let bnbPrice; // in USD (from CoinGecko)
+      let availableSupply;
+
+      // Function to check for an injected provider.
+      function getInjectedProvider() {
+        if (typeof window === "undefined") return null;
+        if (window.ethereum) return window.ethereum;
+        return null;
+      }
+      async function getInjectedProviderWithTimeout(timeout = 3000) {
+        let prov = getInjectedProvider();
+        if (prov) return prov;
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(getInjectedProvider());
+          }, timeout);
+        });
+      }
+
+      // Function to connect the wallet.
+      async function connectWallet() {
         try {
-          // Get the ethers provider from the adapter.
-          ethersProvider = wagmiAdapter.getProvider();
-          ethersSigner = ethersProvider.getSigner();
-          dappContract = new ethers.Contract(
-            dappContractAddress,
+          // Try using an injected provider first.
+          const injected = await getInjectedProviderWithTimeout();
+          if (injected) {
+            provider = new ethers.providers.Web3Provider(injected);
+            await provider.send("eth_requestAccounts", []);
+          } else {
+            // If no injected provider, use WalletConnect v2.
+            // IMPORTANT: Replace "YOUR_PROJECT_ID" with your actual project ID.
+            const wcProvider =
+              await window.WalletConnectEthereumProvider.default.init({
+                projectId: "35ee0797cf298b1835906b5a22bc50e5",
+                chains: [56], // Binance Smart Chain
+                showQrModal: true, // Shows a QR modal on desktop; on mobile deep linking is used.
+                redirectUrl: window.location.href, // Must exactly match your dApp's URL.
+                metadata: {
+                  name: "KiraCoin Exchange",
+                  description: "Connect to KiraCoin Exchange",
+                  url: window.location.href,
+                  icons: [],
+                },
+              });
+            await wcProvider.enable();
+            provider = new ethers.providers.Web3Provider(wcProvider);
+          }
+          signer = provider.getSigner();
+          kiraContract = new ethers.Contract(
+            contractAddress,
             contractABI,
-            ethersSigner
+            signer
           );
-          // Update contract stats.
-          updateContractStats();
+          await updateContractStats();
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
+          // Hide the Connect Wallet button after successful connection.
+          document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
-          console.error("Error initializing contract:", error);
+          console.error("Wallet connection failed:", error);
         }
       }
 
+      // Visibility change workaround: force reload when returning from wallet app.
+      document.addEventListener("visibilitychange", () => {
+        if (
+          document.visibilityState === "visible" &&
+          provider &&
+          document.getElementById("walletAddress").innerText === "Not connected"
+        ) {
+          window.location.reload();
+        }
+      });
+
+      // Dummy function to update contract stats (replace with your actual logic).
       async function updateContractStats() {
         try {
-          // Example: Call availableSupply() and update UI.
-          const supply = await dappContract.availableSupply();
+          const adjustment = ethers.utils.parseUnits("47000000", 18);
+          const currentPrice = await kiraContract.currentPrice();
+          currentPriceBN = currentPrice;
+          document.getElementById("currentPrice").innerText =
+            ethers.utils.formatUnits(currentPrice, 18);
+          const supply = await kiraContract.availableSupply();
+          const adjustedSupply = supply.sub(adjustment);
+          availableSupply = adjustedSupply;
           document.getElementById("availableSupply").innerText =
-            ethers.utils.formatUnits(supply, 18);
-          // You can add more contract calls here.
+            ethers.utils.formatUnits(adjustedSupply, 18);
+          const sold = await kiraContract.totalTokensSold();
+          const adjustedSold = sold.add(adjustment);
+          document.getElementById("totalSold").innerText =
+            ethers.utils.formatUnits(adjustedSold, 18);
+          bnbPrice = await getBnbPrice();
         } catch (error) {
           console.error("Error updating contract stats:", error);
         }
       }
-    </script>
 
-    <!-- Existing DApp Purchase Functions -->
-    <script>
-      // Function to update preview for stablecoin purchase.
+      async function getBnbPrice() {
+        const apiUrl =
+          "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd";
+        try {
+          const response = await fetch(apiUrl);
+          const data = await response.json();
+          return data.binancecoin.usd;
+        } catch (error) {
+          console.error("Error fetching BNB price:", error);
+          return null;
+        }
+      }
+
+      // Update preview for stablecoin purchase.
       function updateStablecoinPreview() {
         const usdVal = parseFloat(
           document.getElementById("stablecoinAmount").value
@@ -858,14 +906,14 @@
           document.getElementById("stablecoinUsdPreview").value = "";
           return;
         }
-        const kiraTokens = usdVal / 100; // 1 KIRA = $100 USD
+        const kiraTokens = usdVal / kiraUsdPrice;
         document.getElementById("stablecoinKiraPreview").value =
           kiraTokens.toFixed(4);
         document.getElementById("stablecoinUsdPreview").value =
           "$" + usdVal.toFixed(2);
       }
 
-      // Function to update preview for native (BNB) purchase.
+      // Update preview for native (BNB) purchase.
       async function updateNativePreview() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -875,11 +923,10 @@
           document.getElementById("bnbEquivalentPreview").value = "";
           return;
         }
-        // Assume currentPriceBN has been set via contract call.
         const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
         const expectedKiraTokensBN = usdAmountBN
           .mul(ethers.BigNumber.from(10).pow(18))
-          .div(window.currentPriceBN || ethers.utils.parseUnits("100", 18)); // fallback if not set
+          .div(currentPriceBN);
         const tolerance = expectedKiraTokensBN.mul(1).div(100);
         const minTokensBN = expectedKiraTokensBN.sub(tolerance);
         const expectedKiraTokens = parseFloat(
@@ -887,14 +934,12 @@
         );
         document.getElementById("bnbKiraPreview").value =
           expectedKiraTokens.toFixed(4);
-        // Assume bnbPrice is set (you may update this from an API)
-        const bnbPrice = window.bnbPrice || 300; // fallback value
         const bnbEquivalent = usdVal / bnbPrice;
         document.getElementById("bnbEquivalentPreview").value =
           bnbEquivalent.toFixed(6);
       }
 
-      // Function to purchase with stablecoin.
+      // Purchase with stablecoin.
       async function buyWithStablecoin() {
         const stablecoinSelect =
           document.getElementById("stablecoinSelect").value;
@@ -905,7 +950,7 @@
           alert("Enter a valid USD amount");
           return;
         }
-        const kiraTokens = usdVal / 100;
+        const kiraTokens = usdVal / kiraUsdPrice;
         const kiraTokensStr = kiraTokens.toFixed(18);
         const tokenAmount = ethers.utils.parseUnits(kiraTokensStr, 18);
         const totalPriceStable = ethers.utils.parseUnits(usdVal.toString(), 18);
@@ -913,27 +958,27 @@
           const stable = new ethers.Contract(
             stablecoins[stablecoinSelect].address,
             ["function approve(address,uint256) public returns (bool)"],
-            ethersSigner
+            signer
           );
           const approveTx = await stable.approve(
-            dappContractAddress,
+            contractAddress,
             totalPriceStable
           );
           await approveTx.wait();
-          const tx = await dappContract.buyWithStablecoin(
+          const tx = await kiraContract.buyWithStablecoin(
             stablecoins[stablecoinSelect].address,
             tokenAmount
           );
           await tx.wait();
           alert("Stablecoin purchase successful!");
-          updateContractStats();
+          await updateContractStats();
         } catch (error) {
           console.error("Stablecoin purchase failed:", error);
           alert("Purchase failed: " + error.message);
         }
       }
 
-      // Function to purchase with native currency (BNB).
+      // Purchase with native currency (BNB).
       async function buyWithNative() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -942,29 +987,29 @@
           alert("Enter a valid USD amount");
           return;
         }
-        const bnbEquivalent = usdVal / (window.bnbPrice || 300);
+        const bnbEquivalent = usdVal / bnbPrice;
         const bnbEquivalentStr = bnbEquivalent.toFixed(18);
         const bnbValue = ethers.utils.parseEther(bnbEquivalentStr);
         const usdAmountBN = ethers.utils.parseUnits(usdVal.toString(), 18);
         const expectedKiraTokensBN = usdAmountBN
           .mul(ethers.BigNumber.from(10).pow(18))
-          .div(window.currentPriceBN || ethers.utils.parseUnits("100", 18));
+          .div(currentPriceBN);
         const tolerance = expectedKiraTokensBN.mul(1).div(100);
         const minTokensBN = expectedKiraTokensBN.sub(tolerance);
         try {
-          const tx = await dappContract.buyWithNative(minTokensBN, {
+          const tx = await kiraContract.buyWithNative(minTokensBN, {
             value: bnbValue,
           });
           await tx.wait();
           alert("Native purchase successful!");
-          updateContractStats();
+          await updateContractStats();
         } catch (error) {
           console.error("BNB purchase failed:", error);
           alert("Purchase failed: " + error.message);
         }
       }
 
-      // Attach event listeners for purchase inputs and buttons.
+      // Attach event listeners.
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -977,13 +1022,10 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
-
-      // Attach event listener to the Connect Wallet button.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
-
-      // Optionally, you may auto-trigger connection on page load:
+      // Optionally, auto-trigger connection on page load:
       // window.addEventListener("load", connectWallet);
     </script>
     <!-- Bootstrap JS -->
