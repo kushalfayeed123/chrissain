@@ -39,7 +39,7 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Connect Wallet button styling */
+      /* Place Connect Wallet button at the very top */
       #connectWalletButton {
         display: block;
         margin: 1rem auto;
@@ -51,6 +51,13 @@
     </style>
   </head>
   <body>
+    <!-- Connect Wallet Button at the Top -->
+    <div style="text-align: center; margin-top: 1rem">
+      <button id="connectWalletButton" class="btn btn-primary">
+        Connect Wallet
+      </button>
+    </div>
+
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
@@ -61,10 +68,6 @@
           Not connected
         </div>
       </div>
-      <!-- Single Connect Wallet Button -->
-      <button id="connectWalletButton" class="btn btn-primary">
-        Connect Wallet
-      </button>
     </nav>
 
     <!-- Mobile Warning Banner (if needed) -->
@@ -97,7 +100,7 @@
         </div>
       </div>
 
-      <!-- Purchase Sections (your existing purchase UI remains here) -->
+      <!-- Purchase Sections -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
         <div class="col-md-6">
@@ -144,6 +147,7 @@
             </button>
           </div>
         </div>
+
         <!-- Buy with Native Currency (BNB) -->
         <div class="col-md-6">
           <div class="card">
@@ -198,7 +202,7 @@
 
       // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Replace with your actual contract ABI.
+      // Replace with your actual contract ABI array.
       const contractABI = [
         {
           inputs: [
@@ -768,6 +772,7 @@
         { stateMutability: "payable", type: "receive" },
       ];
 
+      // Example stablecoin config (BUSD & USDT on BSC)
       const stablecoins = {
         BUSD: {
           address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
@@ -778,7 +783,8 @@
           decimals: 18,
         },
       };
-      const kiraUsdPrice = 100; // 1 KIRA = $100 USD
+      const kiraUsdPrice = 100; // 1 KIRA = $100 USD.
+
       let kiraContract, provider, signer;
       let currentPriceBN; // BigNumber (18 decimals)
       let bnbPrice; // in USD (from CoinGecko)
@@ -790,7 +796,6 @@
         if (window.ethereum) return window.ethereum;
         return null;
       }
-
       async function getInjectedProviderWithTimeout(timeout = 3000) {
         let prov = getInjectedProvider();
         if (prov) return prov;
@@ -801,25 +806,25 @@
         });
       }
 
-      // Function to connect wallet.
+      // Function to connect the wallet.
       async function connectWallet() {
         try {
-          // First, try to use an injected provider.
+          // First try injected provider (e.g. MetaMask in a DApp browser)
           const injected = await getInjectedProviderWithTimeout();
           if (injected) {
             provider = new ethers.providers.Web3Provider(injected);
             await provider.send("eth_requestAccounts", []);
           } else {
             // If no injected provider, use WalletConnect v2.
-            // Replace "YOUR_PROJECT_ID" with your actual WalletConnect v2 project ID.
+            // IMPORTANT: Replace "YOUR_PROJECT_ID" with your actual WalletConnect v2 project ID.
             const wcProvider = await WalletConnectEthereumProvider.init({
               projectId: "35ee0797cf298b1835906b5a22bc50e5",
               chains: [56], // Binance Smart Chain
-              showQrModal: false, // Set to true to show QR modal on desktop; on mobile, deep linking may occur.
-              redirectUrl: window.location.href, // Must match your dApp's URL exactly.
+              showQrModal: true, // Will show QR modal on desktop; on mobile deep linking may occur.
+              redirectUrl: window.location.href, // Must exactly match your dApp's URL.
               metadata: {
                 name: "KiraCoin Exchange",
-                description: "Decentralized exchange for KIRA tokens",
+                description: "Connect to exchange",
                 url: window.location.href,
                 icons: [],
               },
@@ -836,37 +841,29 @@
           await updateContractStats();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
-          // Hide the connect button after successful connection.
+          // Hide the Connect Wallet button after connection.
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Workaround: when the page becomes visible (i.e. after returning from wallet app),
-      // force a reload if a cached provider exists but no connection is detected.
+      // Visibility change workaround: when the page becomes visible (user returns from wallet app), force a reload if needed.
       document.addEventListener("visibilitychange", () => {
         if (
           document.visibilityState === "visible" &&
-          web3Modal.cachedProvider
+          provider &&
+          document.getElementById("walletAddress").innerText === "Not connected"
         ) {
-          if (
-            document.getElementById("walletAddress").innerText ===
-            "Not connected"
-          ) {
-            window.location.reload();
-          }
+          window.location.reload();
         }
       });
 
-      // Dummy function to update contract stats (replace with your own logic)
+      // Dummy function to update contract stats (replace with your actual logic).
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
-          const currentPrice = ethers.utils.parseUnits(
-            kiraUsdPrice.toString(),
-            18
-          );
+          const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
           document.getElementById("currentPrice").innerText =
             ethers.utils.formatUnits(currentPrice, 18);
@@ -1011,7 +1008,7 @@
         }
       }
 
-      // Attach event listeners.
+      // Attach event listeners for purchase preview and purchase buttons.
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -1024,6 +1021,8 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
+
+      // Attach event listener to the Connect Wallet button.
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
