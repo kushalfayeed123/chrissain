@@ -16,10 +16,6 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- WalletConnect Provider (v1) -->
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
-    <!-- Web3Modal (v1) -->
-    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -50,6 +46,8 @@
       #mobileWarning {
         text-align: center;
         margin: 0.5rem;
+        color: red;
+        font-weight: bold;
       }
       /* Connect Wallet button styling (displayed if not connected) */
       #connectWalletButton {
@@ -73,12 +71,17 @@
 
     <!-- Warning for mobile browsers (if needed) -->
     <div id="mobileWarning" style="display: none">
-      For optimal wallet connectivity on mobile devices, please use a
-      wallet-enabled browser.
+      For optimal wallet connectivity, please launch this app in a
+      wallet‑enabled browser.
     </div>
 
-    <!-- Fallback Container for WalletConnect (if needed) -->
-    <div id="fallbackContainer"></div>
+    <!-- Fallback Container (if no injected provider) -->
+    <div id="fallbackContainer" style="display: none">
+      <p>
+        Please open this dApp in a wallet‑enabled browser (e.g. MetaMask, Trust
+        Wallet, Opera, or Phantom with EVM support) to connect your wallet.
+      </p>
+    </div>
 
     <!-- Main Content -->
     <div class="container my-5">
@@ -104,7 +107,7 @@
         </div>
       </div>
 
-      <!-- Purchase Sections -->
+      <!-- Purchase Sections (same as before) -->
       <div class="row g-4">
         <!-- Buy with Stablecoins -->
         <div class="col-md-6">
@@ -193,7 +196,7 @@
       </div>
     </div>
 
-    <!-- Connect Wallet Button (single button to trigger Web3Modal) -->
+    <!-- Connect Wallet Button -->
     <button
       id="connectWalletButton"
       class="btn btn-primary"
@@ -204,7 +207,7 @@
 
     <!-- JavaScript -->
     <script>
-      // Show mobile warning if necessary
+      // Show mobile warning if necessary (you might adjust this based on testing)
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -215,7 +218,7 @@
 
       // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Replace with your actual contract ABI array
+      // Set your contract's ABI here (replace with your actual ABI)
       const contractABI = [
         {
           inputs: [
@@ -789,28 +792,34 @@
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Set up provider options for Web3Modal
-      const providerOptions = {
-        walletconnect: {
-          package: WalletConnectProvider.default,
-          options: {
-            rpc: { 56: "https://bsc-dataseed.binance.org/" },
-            chainId: 56,
-          },
-        },
-      };
-
-      // Initialize Web3Modal
-      const web3Modal = new window.Web3Modal.default({
-        cacheProvider: false,
-        providerOptions,
-      });
-
-      // Function to connect using Web3Modal (works for injected providers and WalletConnect)
+      // Connect using injected provider only
       async function connectWallet() {
+        if (typeof window.ethereum === "undefined") {
+          // No injected provider; show fallback message
+          document.getElementById("fallbackContainer").style.display = "block";
+          return;
+        }
         try {
-          const instance = await web3Modal.connect();
-          provider = new ethers.providers.Web3Provider(instance);
+          // Request account access
+          await window.ethereum.request({ method: "eth_requestAccounts" });
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          // Check network
+          const network = await provider.getNetwork();
+          console.log("Connected network:", network);
+          if (network.chainId !== 56) {
+            try {
+              // Prompt user to switch to BSC mainnet
+              await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: "0x38" }], // 0x38 is 56 in hex
+              });
+            } catch (switchError) {
+              alert(
+                "Please switch your wallet network to Binance Smart Chain Mainnet."
+              );
+              return;
+            }
+          }
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
             contractAddress,
@@ -820,8 +829,7 @@
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
           await updateContractStats();
-
-          // Hide the Connect Wallet button once connected
+          // Hide the Connect Wallet button after successful connection
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
@@ -990,17 +998,9 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
-
-      // Attach event listener to the Connect Wallet button
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
-
-      // Automatically attempt connection on page load (optional)
-      window.addEventListener("load", () => {
-        // Optionally, you can auto-trigger connectWallet() here.
-        // For now, we leave it for the user to tap the Connect Wallet button.
-      });
     </script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
