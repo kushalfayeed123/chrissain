@@ -16,8 +16,10 @@
     />
     <!-- Ethers.js -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <!-- Coinbase Wallet SDK (UMD build) -->
-    <script src="https://unpkg.com/@coinbase/wallet-sdk/dist/wallet-sdk.umd.min.js"></script>
+    <!-- WalletConnect Provider (v1) -->
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
+    <!-- Web3Modal (v1) -->
+    <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
     <style>
       body {
         font-family: "Inter", sans-serif;
@@ -39,25 +41,24 @@
       .btn-primary {
         background-image: linear-gradient(152deg, #590202 0%, #a61103 100%);
       }
-      /* Connect Wallet button placed at the very top */
-      #connectWalletButton {
-        display: block;
+      /* Fallback container styling */
+      #fallbackContainer {
+        text-align: center;
         margin: 1rem auto;
+        max-width: 500px;
       }
       #mobileWarning {
         text-align: center;
         margin: 0.5rem;
       }
+      /* Connect Wallet button styling (displayed if not connected) */
+      #connectWalletButton {
+        display: block;
+        margin: 1rem auto;
+      }
     </style>
   </head>
   <body>
-    <!-- Connect Wallet Button at the Top -->
-    <div style="text-align: center; margin-top: 1rem">
-      <button id="connectWalletButton" class="btn btn-primary">
-        Connect Wallet
-      </button>
-    </div>
-
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
@@ -70,13 +71,16 @@
       </div>
     </nav>
 
-    <!-- Mobile Warning Banner (if needed) -->
+    <!-- Warning for mobile browsers (if needed) -->
     <div id="mobileWarning" style="display: none">
-      For optimal wallet connectivity on mobile, please use a wallet‑enabled
-      browser.
+      For optimal wallet connectivity on mobile devices, please use a
+      wallet-enabled browser.
     </div>
 
-    <!-- Main Container -->
+    <!-- Fallback Container for WalletConnect (if needed) -->
+    <div id="fallbackContainer"></div>
+
+    <!-- Main Content -->
     <div class="container my-5">
       <!-- Stats Section -->
       <div class="row g-4 mb-4">
@@ -189,17 +193,18 @@
       </div>
     </div>
 
+    <!-- Connect Wallet Button (single button to trigger Web3Modal) -->
+    <button
+      id="connectWalletButton"
+      class="btn btn-primary"
+      style="display: block; margin: 1rem auto"
+    >
+      Connect Wallet
+    </button>
+
     <!-- JavaScript -->
     <script>
-      // Debug log to confirm button click.
-      document
-        .getElementById("connectWalletButton")
-        .addEventListener("click", () => {
-          console.log("Connect Wallet button clicked.");
-          connectWallet();
-        });
-
-      // Show mobile warning if necessary.
+      // Show mobile warning if necessary
       function isMobileBrowser() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
         return /Chrome|Safari|Firefox/.test(ua) && /Mobile/.test(ua);
@@ -208,9 +213,9 @@
         document.getElementById("mobileWarning").style.display = "block";
       }
 
-      // Global configuration – update these values for your project.
+      // Global configuration – UPDATE THESE VALUES FOR YOUR PROJECT!
       const contractAddress = "0xc4922B44A7109B9c77F6f77c650C5949661F874f";
-      // Replace with your actual contract ABI array.
+      // Replace with your actual contract ABI array
       const contractABI = [
         {
           inputs: [
@@ -497,11 +502,7 @@
         {
           inputs: [
             { internalType: "address", name: "token", type: "address" },
-            {
-              internalType: "uint256",
-              name: "tokenDecimals",
-              type: "uint256",
-            },
+            { internalType: "uint256", name: "tokenDecimals", type: "uint256" },
           ],
           name: "addStablecoin",
           outputs: [],
@@ -649,11 +650,7 @@
         {
           inputs: [
             { internalType: "address", name: "_recipient", type: "address" },
-            {
-              internalType: "uint256",
-              name: "_nativeAmount",
-              type: "uint256",
-            },
+            { internalType: "uint256", name: "_nativeAmount", type: "uint256" },
           ],
           name: "reconcileNativeCoinAccounts",
           outputs: [],
@@ -692,11 +689,7 @@
         {
           inputs: [
             { internalType: "uint256", name: "newStep", type: "uint256" },
-            {
-              internalType: "uint256",
-              name: "newMultiplier",
-              type: "uint256",
-            },
+            { internalType: "uint256", name: "newMultiplier", type: "uint256" },
           ],
           name: "setPriceParams",
           outputs: [],
@@ -779,8 +772,6 @@
         },
         { stateMutability: "payable", type: "receive" },
       ];
-
-      // Example stablecoin configuration (BUSD & USDT on BSC).
       const stablecoins = {
         BUSD: {
           address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
@@ -791,97 +782,57 @@
           decimals: 18,
         },
       };
-      const kiraUsdPrice = 100; // 1 KIRA = $100 USD.
-
+      // Assumed conversion rate: 1 KIRA = $100 USD
+      const kiraUsdPrice = 100;
       let kiraContract, provider, signer;
       let currentPriceBN; // BigNumber (18 decimals)
       let bnbPrice; // in USD (from CoinGecko)
       let availableSupply;
 
-      // Function to check for an injected provider.
-      function getInjectedProvider() {
-        if (typeof window === "undefined") return null;
-        if (window.ethereum) return window.ethereum;
-        return null;
-      }
-      async function getInjectedProviderWithTimeout(timeout = 3000) {
-        let prov = getInjectedProvider();
-        if (prov) return prov;
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolve(getInjectedProvider());
-          }, timeout);
-        });
-      }
+      // Set up provider options for Web3Modal
+      const providerOptions = {
+        walletconnect: {
+          package: WalletConnectProvider.default,
+          options: {
+            rpc: { 56: "https://bsc-dataseed.binance.org/" },
+            chainId: 56,
+          },
+        },
+      };
 
-      // Function to connect wallet.
+      // Initialize Web3Modal
+      const web3Modal = new window.Web3Modal.default({
+        cacheProvider: false,
+        providerOptions,
+      });
+
+      // Function to connect using Web3Modal (works for injected providers and WalletConnect)
       async function connectWallet() {
         try {
-          // First, try using an injected provider.
-          const injected = await getInjectedProviderWithTimeout();
-          if (injected) {
-            console.log("Injected provider found.");
-            provider = new ethers.providers.Web3Provider(injected);
-            await provider.send("eth_requestAccounts", []);
-          } else {
-            console.log(
-              "No injected provider; using Coinbase Wallet SDK fallback."
-            );
-            // Use Coinbase Wallet SDK as a fallback.
-            const APP_NAME = "KiraCoin Exchange";
-            const APP_LOGO_URL = "https://example.com/logo.png"; // Update with your logo URL.
-            const DEFAULT_CHAIN_ID = 56; // Binance Smart Chain.
-            const coinbaseWallet = new window.CoinbaseWalletSDK({
-              appName: APP_NAME,
-              appLogoUrl: APP_LOGO_URL,
-              darkMode: false,
-            });
-            // Create a provider instance; update the RPC URL if needed.
-            provider = new ethers.providers.Web3Provider(
-              coinbaseWallet.makeWeb3Provider(
-                "https://bsc-dataseed.binance.org/",
-                DEFAULT_CHAIN_ID
-              )
-            );
-            await provider.send("eth_requestAccounts", []);
-          }
+          const instance = await web3Modal.connect();
+          provider = new ethers.providers.Web3Provider(instance);
           signer = provider.getSigner();
           kiraContract = new ethers.Contract(
             contractAddress,
             contractABI,
             signer
           );
-          await updateContractStats();
           const address = await signer.getAddress();
-          console.log("Connected address:", address);
           document.getElementById("walletAddress").innerText = address;
-          // Hide the Connect Wallet button after successful connection.
+          await updateContractStats();
+
+          // Hide the Connect Wallet button once connected
           document.getElementById("connectWalletButton").style.display = "none";
         } catch (error) {
           console.error("Wallet connection failed:", error);
         }
       }
 
-      // Visibility change workaround: force reload if user returns from wallet app and no connection detected.
-      document.addEventListener("visibilitychange", () => {
-        if (
-          document.visibilityState === "visible" &&
-          provider &&
-          document.getElementById("walletAddress").innerText === "Not connected"
-        ) {
-          console.log("Visibility change detected; reloading page.");
-          window.location.reload();
-        }
-      });
-
-      // Dummy function to update contract stats (replace with your actual logic).
+      // Update contract stats (dummy implementation; replace with your logic)
       async function updateContractStats() {
         try {
           const adjustment = ethers.utils.parseUnits("47000000", 18);
-          const currentPrice = ethers.utils.parseUnits(
-            kiraUsdPrice.toString(),
-            18
-          );
+          const currentPrice = await kiraContract.currentPrice();
           currentPriceBN = currentPrice;
           document.getElementById("currentPrice").innerText =
             ethers.utils.formatUnits(currentPrice, 18);
@@ -913,7 +864,7 @@
         }
       }
 
-      // Update preview for stablecoin purchase.
+      // Update preview for stablecoin purchase
       function updateStablecoinPreview() {
         const usdVal = parseFloat(
           document.getElementById("stablecoinAmount").value
@@ -930,7 +881,7 @@
           "$" + usdVal.toFixed(2);
       }
 
-      // Update preview for native (BNB) purchase.
+      // Update preview for native (BNB) purchase
       async function updateNativePreview() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -956,7 +907,7 @@
           bnbEquivalent.toFixed(6);
       }
 
-      // Purchase with stablecoin.
+      // Purchase with stablecoin
       async function buyWithStablecoin() {
         const stablecoinSelect =
           document.getElementById("stablecoinSelect").value;
@@ -995,7 +946,7 @@
         }
       }
 
-      // Purchase with native currency (BNB).
+      // Purchase with native currency (BNB)
       async function buyWithNative() {
         const usdVal = parseFloat(
           document.getElementById("bnbUsdAmount").value
@@ -1026,7 +977,7 @@
         }
       }
 
-      // Attach event listeners.
+      // Attach event listeners for input and purchase buttons
       document
         .getElementById("stablecoinAmount")
         .addEventListener("input", updateStablecoinPreview);
@@ -1039,11 +990,17 @@
       document
         .getElementById("buyNativeButton")
         .addEventListener("click", buyWithNative);
+
+      // Attach event listener to the Connect Wallet button
       document
         .getElementById("connectWalletButton")
         .addEventListener("click", connectWallet);
-      // Optionally, auto-trigger connection on page load:
-      // window.addEventListener("load", connectWallet);
+
+      // Automatically attempt connection on page load (optional)
+      window.addEventListener("load", () => {
+        // Optionally, you can auto-trigger connectWallet() here.
+        // For now, we leave it for the user to tap the Connect Wallet button.
+      });
     </script>
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
